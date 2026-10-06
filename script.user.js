@@ -1,9 +1,9 @@
 // ==UserScript==
-// @name         Wide ChatGPT
+// @name         UltraWide ChatGPT
 // @namespace    https://www.instagram.com/jsm.ig/
-// @version      2026.10.01.12
+// @version      2026.10.06.22
 // @author       jsmdev
-// @description  Robust ultra-wide layout for current ChatGPT Chat and Work with adaptive width, split-view safety, diagnostics, settings, SPA support, and complete cleanup.
+// @description  UltraWide ChatGPT provides a robust ultra-wide layout for current ChatGPT Chat and Work with adaptive width, split-view safety, diagnostics, settings, SPA support, and complete cleanup.
 // @license      MIT
 // @match        https://chatgpt.com/*
 // @match        https://www.chatgpt.com/*
@@ -20,7 +20,7 @@
 
 /*
   UltraWide ChatGPT
-  Version: 2026.10.01.12
+  Version: 2026.10.06.22
 
   Improvements
   - Updated for the current ChatGPT Chat + Work web surface
@@ -72,6 +72,36 @@
   - Diagnostics now report pane geometry, selector health, compatibility issues, and observer state
   - Pane observation automatically follows React/SPA remounts and falls back safely when unavailable
   - Redesigns the userscript-manager menu with compact, consistent status labels and clearer runtime details
+  - Adds continuous self-healing enforcement with bounded automatic retry instead of passive failure detection
+  - Adds a root lifecycle observer so root-state loss and head/body replacement are repaired immediately
+  - Head integrity monitoring now observes subtree/style text mutations, not only direct head children
+  - Adds a lightweight enforcement watchdog that verifies styles, observers, root state, markers, and layout invariants
+  - Makes the disabled state strict: no layout CSS, managed markers, or root-state residue may be reintroduced by background repair paths
+  - Hardens style mounting against wrong-node, wrong-parent, and duplicate-ID corruption
+  - Recoverable invariant failures trigger automatic re-application before any safety fallback is considered
+  - Safe fallback is now reserved for persistent geometry-safety failures and can automatically recover after the layout becomes healthy
+  - Redesigns the settings UI around a compact runtime dashboard and clearer information hierarchy
+  - Adds live health, DOM strategy, confidence, pane-width, turn-count, and watchdog metrics to settings
+  - Moves technical runtime tuning, shortcuts, and downloads into a focused Advanced section
+  - Adds one-click Repair now and Run self-test actions with immediate UI feedback
+  - Improves responsive behavior, keyboard focus visibility, status semantics, spacing, and visual density
+  - Fixes reconciliation convergence so it is based on post-repair state instead of stale pre-repair differences
+  - Marks animation-frame/full-scan repairs as pending until a later verification pass can observe the result
+  - Fixes Repair now feedback so successful repairs are not reported as unresolved
+  - Restores the settings UI after the lifecycle torture test intentionally stops and restarts the runtime
+  - Hardens settings actions with bounded error handling and explicit failure feedback
+  - Adds a selector-health registry with hit counts, visibility, last-seen timestamps, failure streaks, and grouped health scoring
+  - Adds repair-effectiveness metrics for execution, success, coalescing, escalation, duration, and idempotency
+  - Adds explicit performance budgets for watchdog, reconciliation, full scans, and self-tests with violation accounting
+  - Serializes self-healing through a reconciliation lock and coalesces concurrent requests into one queued follow-up pass
+  - Adds runtime epochs and stale-callback guards across scheduled scans, observers, route checks, watchdogs, and interval work
+  - Expands health reporting into Runtime, Styles, DOM, Width, Reconciliation, and Performance component scores
+  - Adds a deterministic built-in regression test API for core normalization, strategy, repair, epoch, health, and metrics contracts
+  - Standardizes the extension's canonical display name as UltraWide ChatGPT across metadata, UI, diagnostics, and bug reports
+  - Centralizes the product display name in PRODUCT_NAME to prevent future branding drift
+  - Adds pending-reconciliation gating so full-scan repairs cannot spawn overlapping reconciliation passes before verification
+  - Clears queued reconciliation state when pending asynchronous repair work is superseded by a runtime stop or restart
+  - Extends regression coverage for canonical branding and pending-reconciliation contracts
 
   Shortcuts
   - Alt+O  Enable/disable script
@@ -88,7 +118,25 @@
   - window.__mlUltraWide.diagnostics()
   - window.__mlUltraWide.capabilities()
   - window.__mlUltraWide.verify()
+  - window.__mlUltraWide.selfTest()
+  - window.__mlUltraWide.regressionTest()
+  - window.__mlUltraWide.health()
+  - window.__mlUltraWide.healthBreakdown()
+  - window.__mlUltraWide.selectorHealth()
+  - window.__mlUltraWide.repairEffectiveness()
+  - window.__mlUltraWide.performanceBudget()
+  - window.__mlUltraWide.reconcile()
+  - window.__mlUltraWide.fingerprint()
+  - window.__mlUltraWide.repairHistory()
+  - window.__mlUltraWide.strategy()
+  - window.__mlUltraWide.repairPlan()
+  - window.__mlUltraWide.lifecycleTortureSelfTest()
+  - window.__mlUltraWide.failureCodes()
+  - window.__mlUltraWide.convergence()
+  - window.__mlUltraWide.enforce()
   - window.__mlUltraWide.copyDiagnostics()
+  - window.__mlUltraWide.downloadDiagnostics()
+  - window.__mlUltraWide.downloadBugReport()
   - window.__mlUltraWide.apply()
   - window.__mlUltraWide.scan()
   - window.__mlUltraWide.restart()
@@ -101,14 +149,16 @@
 (() => {
   'use strict';
 
-  const VERSION = '2026.10.01.12';
-  const STORAGE_KEY = 'uwc.settings.v12';
+  const VERSION = '2026.10.06.22';
+  const PRODUCT_NAME = 'UltraWide ChatGPT';
+  const STORAGE_KEY = 'uwc.settings.v14';
 
   const ID = Object.freeze({
     style: 'uwc-style-v11',
     uiStyle: 'uwc-ui-style-v11',
     toast: 'uwc-toast-v11',
-    modal: 'uwc-settings-v11'
+    modal: 'uwc-settings-v11',
+    debugOverlay: 'uwc-debug-overlay-v11'
   });
 
   const LEGACY_STYLE_IDS = Object.freeze([
@@ -134,6 +184,8 @@
   ]);
 
   const LEGACY_STORAGE_KEYS = Object.freeze([
+    'uwc.settings.v13',
+    'uwc.settings.v12',
     'uwc.settings.v11',
     'uwc.settings.v10',
     'uwc.settings.v9',
@@ -221,6 +273,7 @@
 
     pauseWhenHidden: true,
     performanceTelemetry: true,
+    debugOverlay: false,
 
     closeSettingsOnBackdrop: true
   });
@@ -252,6 +305,23 @@
     idleTimeoutMs: 700,
     debugEventLimit: 50,
     invariantFailureThreshold: 3,
+    enforcementStableIntervalMs: 10000,
+    enforcementNormalIntervalMs: 5000,
+    enforcementActiveIntervalMs: 1500,
+    enforcementUnstableIntervalMs: 750,
+    enforcementRetryLimit: 5,
+    enforcementRetryCooldownMs: 5000,
+    fingerprintChangeCooldownMs: 300,
+    widthTolerancePx: 12,
+    widthToleranceRatio: 0.06,
+    repairHistoryLimit: 80,
+    strategyMinConfidence: 60,
+    mutationIntentTtlMs: 300,
+    convergenceStallLimit: 3,
+    convergenceHardLimit: 6,
+    lifecycleTortureCycles: 3,
+    selectorHealthStaleMs: 5000,
+    selectorHealthMissingThreshold: 3,
     reloadLoopWindowMs: 10000,
     reloadLoopMaxCount: 2,
     mutationAttributeFilter: Object.freeze([
@@ -366,6 +436,64 @@
     ].join(',')
   });
 
+  const SELECTOR_HEALTH_TARGETS = Object.freeze([
+    Object.freeze({
+      id: 'main',
+      selector: SELECTOR.main,
+      label: 'Main surface',
+      group: 'main'
+    }),
+    Object.freeze({
+      id: 'transcript-root',
+      selector: '[data-thread-user-message-navigation-content]',
+      label: 'Transcript root',
+      group: 'conversation'
+    }),
+    Object.freeze({
+      id: 'conversation-target',
+      selector: '[data-thread-find-target="conversation"]',
+      label: 'Conversation target',
+      group: 'conversation'
+    }),
+    Object.freeze({
+      id: 'virtualized-turns',
+      selector: '[data-turn-key],[data-content-search-turn-key]',
+      label: 'Virtualized turns',
+      group: 'turns'
+    }),
+    Object.freeze({
+      id: 'fallback-turns',
+      selector: SELECTOR.fallbackMessages,
+      label: 'Fallback turns',
+      group: 'turns'
+    }),
+    Object.freeze({
+      id: 'composer-input',
+      selector: SELECTOR.composerInput,
+      label: 'Composer input',
+      group: 'composer'
+    }),
+    Object.freeze({
+      id: 'composer-shell',
+      selector: SELECTOR.composerShell,
+      label: 'Composer shell',
+      group: 'composer'
+    }),
+    Object.freeze({
+      id: 'structural-roots',
+      selector: SELECTOR.structuralRoots,
+      label: 'Structural roots',
+      group: 'structural'
+    })
+  ]);
+
+  const PERFORMANCE_BUDGET = Object.freeze({
+    watchdog: 1,
+    reconcile: 2,
+    fullScan: 8,
+    selfTest: 20
+  });
+
   const MANAGED_LAYOUT_SELECTOR = MANAGED_MARKERS
     .map((attribute) => `[${attribute}]`)
     .join(',');
@@ -394,6 +522,142 @@
     DIRTY.root
   ]);
 
+  const FAILURE_CODE = Object.freeze({
+    RUNTIME_NOT_STARTED: 'RUNTIME_NOT_STARTED',
+    MAIN_STYLE_MISSING: 'MAIN_STYLE_MISSING',
+    MAIN_STYLE_INTEGRITY: 'MAIN_STYLE_INTEGRITY',
+    MAIN_STYLE_UNWANTED: 'MAIN_STYLE_UNWANTED',
+    UI_STYLE_INTEGRITY: 'UI_STYLE_INTEGRITY',
+    ROOT_ENABLED_STATE: 'ROOT_ENABLED_STATE',
+    ROOT_STATE_INTEGRITY: 'ROOT_STATE_INTEGRITY',
+    OBSERVER_INTEGRITY: 'OBSERVER_INTEGRITY',
+    DISCONNECTED_MARKERS: 'DISCONNECTED_MARKERS',
+    TURN_MARKERS_MISSING: 'TURN_MARKERS_MISSING',
+    COMPOSER_MARKER_MISSING: 'COMPOSER_MARKER_MISSING',
+    WIDTH_VERIFICATION_FAILED: 'WIDTH_VERIFICATION_FAILED',
+    WIDTH_EXCEEDS_PANE: 'WIDTH_EXCEEDS_PANE',
+    WIDTH_UNDER_APPLIED: 'WIDTH_UNDER_APPLIED',
+    DOM_FINGERPRINT_CHANGED: 'DOM_FINGERPRINT_CHANGED',
+    STRATEGY_LOW_CONFIDENCE: 'STRATEGY_LOW_CONFIDENCE',
+    RECONCILIATION_STALLED: 'RECONCILIATION_STALLED',
+    RECONCILIATION_DID_NOT_CONVERGE: 'RECONCILIATION_DID_NOT_CONVERGE'
+  });
+
+  const LEGACY_FAILURE_CODE_MAP = Object.freeze({
+    'runtime-not-started': FAILURE_CODE.RUNTIME_NOT_STARTED,
+    'main-style-missing': FAILURE_CODE.MAIN_STYLE_MISSING,
+    'main-style-integrity': FAILURE_CODE.MAIN_STYLE_INTEGRITY,
+    'main-style-unwanted': FAILURE_CODE.MAIN_STYLE_UNWANTED,
+    'ui-style-integrity': FAILURE_CODE.UI_STYLE_INTEGRITY,
+    'root-enabled-state': FAILURE_CODE.ROOT_ENABLED_STATE,
+    'root-state-integrity': FAILURE_CODE.ROOT_STATE_INTEGRITY,
+    'observer-integrity': FAILURE_CODE.OBSERVER_INTEGRITY,
+    'disconnected-markers': FAILURE_CODE.DISCONNECTED_MARKERS,
+    'turn-markers-missing': FAILURE_CODE.TURN_MARKERS_MISSING,
+    'composer-marker-missing': FAILURE_CODE.COMPOSER_MARKER_MISSING,
+    'post-apply-width-verification': FAILURE_CODE.WIDTH_VERIFICATION_FAILED,
+    'managed-width-exceeds-pane': FAILURE_CODE.WIDTH_EXCEEDS_PANE,
+    'managed-width-under-applied': FAILURE_CODE.WIDTH_UNDER_APPLIED,
+    'dom-fingerprint-changed': FAILURE_CODE.DOM_FINGERPRINT_CHANGED
+  });
+
+  const STRATEGY_REGISTRY = Object.freeze([
+    Object.freeze({
+      id: 'virtualized-thread',
+      minimumConfidence: 70,
+      score(capabilities) {
+        let score = 0;
+        if (capabilities.transcriptRoot) score += 42;
+        if (capabilities.virtualizedTurns) score += 34;
+        if (capabilities.conversationTarget) score += 8;
+        if (capabilities.threadBottomContainer) score += 8;
+        if (capabilities.promptTextarea) score += 8;
+        return Math.min(100, score);
+      }
+    }),
+    Object.freeze({
+      id: 'conversation-target',
+      minimumConfidence: 65,
+      score(capabilities) {
+        let score = 0;
+        if (capabilities.conversationTarget) score += 42;
+        if (capabilities.virtualizedTurns) score += 22;
+        if (capabilities.fallbackTurns) score += 18;
+        if (capabilities.threadBottomContainer) score += 9;
+        if (capabilities.promptTextarea) score += 9;
+        return Math.min(100, score);
+      }
+    }),
+    Object.freeze({
+      id: 'turn-markers',
+      minimumConfidence: 60,
+      score(capabilities) {
+        let score = 0;
+        if (capabilities.virtualizedTurns) score += 38;
+        if (capabilities.fallbackTurns) score += 28;
+        if (capabilities.mainPresent) score += 14;
+        if (capabilities.threadBottomContainer || capabilities.promptTextarea) score += 12;
+        if (capabilities.transcriptRoot || capabilities.conversationTarget) score += 8;
+        return Math.min(100, score);
+      }
+    }),
+    Object.freeze({
+      id: 'semantic-fallback',
+      minimumConfidence: 55,
+      score(capabilities) {
+        let score = 0;
+        if (capabilities.mainPresent) score += 30;
+        if (capabilities.fallbackTurns) score += 25;
+        if (capabilities.promptTextarea) score += 20;
+        if (capabilities.threadBottomContainer) score += 15;
+        if (capabilities.threadVariableWrappers) score += 10;
+        return Math.min(100, score);
+      }
+    })
+  ]);
+
+  function normalizeFailureCode(value) {
+    const text = String(value || '');
+    return LEGACY_FAILURE_CODE_MAP[text] || text;
+  }
+
+  function normalizeFailureCodes(values = []) {
+    return [...new Set((values || []).map(normalizeFailureCode).filter(Boolean))];
+  }
+
+  function selectDomStrategy(capabilities) {
+    const candidates = STRATEGY_REGISTRY
+      .map((strategy) => ({
+        id: strategy.id,
+        score: strategy.score(capabilities),
+        minimumConfidence: strategy.minimumConfidence
+      }))
+      .sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
+
+    const winner = candidates[0] || {
+      id: 'unknown',
+      score: 0,
+      minimumConfidence: CONFIG.strategyMinConfidence
+    };
+
+    const threshold = Math.max(
+      CONFIG.strategyMinConfidence,
+      winner.minimumConfidence || 0
+    );
+
+    const selection = {
+      id: winner.score >= threshold ? winner.id : 'unknown',
+      candidateId: winner.id,
+      confidence: winner.score,
+      threshold,
+      lowConfidence: winner.score < threshold,
+      candidates
+    };
+
+    runtime.strategySelection = selection;
+    return selection;
+  }
+
   const RELOAD_GUARD_KEY = 'uwc.reload.guard.v1';
 
   const settings = {
@@ -406,11 +670,13 @@
 
     bodyObserver: null,
     headObserver: null,
+    rootObserver: null,
     bootstrapObserver: null,
     paneResizeObserver: null,
 
     observedBody: null,
     observedHead: null,
+    observedRoot: null,
     observedPane: null,
 
     eventController: null,
@@ -419,6 +685,7 @@
     repairTimer: 0,
     routeTimer: 0,
     routeDelayTimer: 0,
+    enforcementTimer: 0,
     toastTimer: 0,
     animationFrame: 0,
     idleCallback: 0,
@@ -463,6 +730,59 @@
     lastRepairReasons: [],
     invariantFailureStreak: 0,
     lastInvariants: null,
+    enforcementCheckCount: 0,
+    enforcementRepairCount: 0,
+    enforcementRetryCount: 0,
+    enforcementLevel: 0,
+    lastEnforcementAt: 0,
+    lastEnforcementRepairAt: 0,
+    lastEnforcementFailures: [],
+    watchdogIntervalMs: 0,
+    stableWatchdogPasses: 0,
+    lastDomFingerprint: '',
+    lastDomFingerprintAt: 0,
+    domFingerprintChanges: 0,
+    lastWidthVerification: null,
+    lastDesiredState: null,
+    lastActualState: null,
+    lastStateDiff: null,
+    healthScore: 0,
+    healthStatus: 'unknown',
+    healthBreakdown: null,
+    selectorHealth: new Map(),
+    lastSelectorHealthAt: 0,
+    repairHistory: [],
+    strategySelection: null,
+    performanceBudgetState: new Map(),
+    reconcileInProgress: false,
+    reconcilePendingVerification: false,
+    reconcilePendingSince: 0,
+    queuedReconciliationReasons: new Set(),
+    queuedReconciliationFrame: 0,
+    queuedReconciliationRequestCount: 0,
+    queuedReconciliationRunCount: 0,
+    reconcileLockContentionCount: 0,
+    epoch: 0,
+    staleCallbackCount: 0,
+    mutationIntentMap: new WeakMap(),
+    lastMutationAttribution: null,
+    internalMutationBatchCount: 0,
+    externalMutationBatchCount: 0,
+    mixedMutationBatchCount: 0,
+    repairPlanCounter: 0,
+    lastRepairPlan: null,
+    lastRepairPlanResult: null,
+    convergenceSignature: '',
+    convergencePreviousFailureCount: 0,
+    convergenceStallCount: 0,
+    convergenceFailureCount: 0,
+    convergencePassCount: 0,
+    idempotentPassCount: 0,
+    lastConvergence: null,
+    lastDomFingerprintChangeAt: 0,
+    lifecycleTestRunning: false,
+    lifecycleTestCount: 0,
+    lastLifecycleTest: null,
     safeFallbackActive: false,
     safeFallbackReason: '',
     debugEvents: [],
@@ -526,11 +846,436 @@
     }
   }
 
+  function currentRuntimeEpoch() {
+    return runtime.epoch;
+  }
+
+  function isCurrentRuntimeEpoch(epoch) {
+    return Boolean(
+      runtime.started &&
+      Number(epoch) === runtime.epoch
+    );
+  }
+
+  function rejectStaleCallback(epoch, source = 'callback') {
+    if (isCurrentRuntimeEpoch(epoch)) {
+      return false;
+    }
+
+    runtime.staleCallbackCount += 1;
+
+    pushDebugEvent('stale-callback-blocked', {
+      source,
+      callbackEpoch: Number(epoch),
+      runtimeEpoch: runtime.epoch
+    });
+
+    return true;
+  }
+
+  function guardRuntimeEpoch(
+    callback,
+    source = 'callback',
+    epoch = currentRuntimeEpoch()
+  ) {
+    return (...args) => {
+      if (rejectStaleCallback(epoch, source)) {
+        return undefined;
+      }
+
+      return callback(...args);
+    };
+  }
+
+  function updateSelectorHealth() {
+    const now = Date.now();
+    const snapshot = {};
+
+    for (const target of SELECTOR_HEALTH_TARGETS) {
+      let nodes = [];
+
+      try {
+        nodes = Array.from(
+          document.querySelectorAll(
+            target.selector
+          )
+        );
+      } catch (_) {}
+
+      const visibleCount =
+        nodes.slice(0, 200)
+          .filter(isVisibleElement)
+          .length;
+
+      const previous =
+        runtime.selectorHealth.get(
+          target.id
+        );
+
+      const hitCount = nodes.length;
+      const present = hitCount > 0;
+
+      const item = {
+        id: target.id,
+        label: target.label,
+        group: target.group,
+        selector: target.selector,
+        hitCount,
+        visibleCount,
+        lastSeenAt:
+          present
+            ? now
+            : previous?.lastSeenAt || 0,
+        failureStreak:
+          present
+            ? 0
+            : (previous?.failureStreak || 0) + 1,
+        status:
+          present
+            ? 'healthy'
+            : (previous?.failureStreak || 0) + 1 >=
+                CONFIG.selectorHealthMissingThreshold
+              ? 'missing'
+              : 'degraded'
+      };
+
+      runtime.selectorHealth.set(
+        target.id,
+        item
+      );
+
+      snapshot[target.id] = {
+        ...item
+      };
+    }
+
+    runtime.lastSelectorHealthAt = now;
+    return snapshot;
+  }
+
+  function getSelectorHealthSummary(
+    refresh = false
+  ) {
+    if (
+      refresh ||
+      !runtime.lastSelectorHealthAt ||
+      Date.now() - runtime.lastSelectorHealthAt >
+        CONFIG.selectorHealthStaleMs
+    ) {
+      updateSelectorHealth();
+    }
+
+    const get = (id) =>
+      runtime.selectorHealth.get(id) || {
+        hitCount: 0,
+        visibleCount: 0,
+        failureStreak: 0,
+        status: 'unknown',
+        lastSeenAt: 0
+      };
+
+    const mainHealthy =
+      get('main').hitCount > 0;
+
+    const conversationEvidence =
+      get('transcript-root').hitCount > 0 ||
+      get('conversation-target').hitCount > 0;
+
+    const turnEvidence =
+      get('virtualized-turns').hitCount > 0 ||
+      get('fallback-turns').hitCount > 0;
+
+    const conversationExpected =
+      conversationEvidence ||
+      turnEvidence ||
+      runtime.lastTurnCount > 0;
+
+    const conversationHealthy =
+      !conversationExpected ||
+      conversationEvidence;
+
+    const turnsHealthy =
+      !conversationExpected ||
+      turnEvidence;
+
+    const composerHealthy =
+      !settings.widenComposer ||
+      get('composer-input').hitCount > 0 ||
+      get('composer-shell').hitCount > 0;
+
+    const structuralHealthy =
+      get('structural-roots').hitCount > 0 ||
+      (
+        !conversationExpected &&
+        composerHealthy
+      );
+
+    const score = Math.round(
+      (mainHealthy ? 20 : 0) +
+      (conversationHealthy ? 25 : 0) +
+      (turnsHealthy ? 30 : 0) +
+      (composerHealthy ? 20 : 0) +
+      (structuralHealthy ? 5 : 0)
+    );
+
+    return {
+      score,
+      status:
+        score >= 90
+          ? 'healthy'
+          : score >= 60
+            ? 'degraded'
+            : 'unhealthy',
+      groups: {
+        main: mainHealthy,
+        conversation: conversationHealthy,
+        turns: turnsHealthy,
+        composer: composerHealthy,
+        structural: structuralHealthy
+      },
+      targets: Object.fromEntries(
+        [...runtime.selectorHealth.entries()]
+          .map(([id, value]) => [
+            id,
+            { ...value }
+          ])
+      ),
+      lastUpdatedAt:
+        runtime.lastSelectorHealthAt
+    };
+  }
+
+  function recordPerformanceSample(
+    name,
+    durationMs
+  ) {
+    const budget =
+      PERFORMANCE_BUDGET[name];
+
+    if (
+      !Number.isFinite(budget) ||
+      !Number.isFinite(durationMs)
+    ) {
+      return null;
+    }
+
+    const previous =
+      runtime.performanceBudgetState.get(
+        name
+      ) || {
+        name,
+        budgetMs: budget,
+        samples: 0,
+        violations: 0,
+        totalMs: 0,
+        maxMs: 0,
+        lastMs: 0,
+        lastAt: 0
+      };
+
+    const next = {
+      ...previous,
+      budgetMs: budget,
+      samples: previous.samples + 1,
+      violations:
+        previous.violations +
+        (durationMs > budget ? 1 : 0),
+      totalMs:
+        previous.totalMs + durationMs,
+      maxMs:
+        Math.max(
+          previous.maxMs,
+          durationMs
+        ),
+      lastMs: durationMs,
+      lastAt: Date.now()
+    };
+
+    runtime.performanceBudgetState.set(
+      name,
+      next
+    );
+
+    return {
+      ...next,
+      averageMs:
+        next.samples > 0
+          ? next.totalMs / next.samples
+          : 0,
+      violationRate:
+        next.samples > 0
+          ? next.violations / next.samples
+          : 0
+    };
+  }
+
+  function getPerformanceBudgetReport() {
+    const operations = {};
+
+    for (
+      const [name, budgetMs] of
+      Object.entries(PERFORMANCE_BUDGET)
+    ) {
+      const state =
+        runtime.performanceBudgetState.get(
+          name
+        ) || {
+          name,
+          budgetMs,
+          samples: 0,
+          violations: 0,
+          totalMs: 0,
+          maxMs: 0,
+          lastMs: 0,
+          lastAt: 0
+        };
+
+      operations[name] = {
+        ...state,
+        averageMs:
+          state.samples > 0
+            ? state.totalMs /
+              state.samples
+            : 0,
+        violationRate:
+          state.samples > 0
+            ? state.violations /
+              state.samples
+            : 0
+      };
+    }
+
+    const sampled =
+      Object.values(operations)
+        .filter((item) =>
+          item.samples > 0
+        );
+
+    const totalSamples =
+      sampled.reduce(
+        (sum, item) =>
+          sum + item.samples,
+        0
+      );
+
+    const totalViolations =
+      sampled.reduce(
+        (sum, item) =>
+          sum + item.violations,
+        0
+      );
+
+    const score =
+      totalSamples > 0
+        ? Math.max(
+            0,
+            Math.round(
+              100 *
+              (1 -
+                totalViolations /
+                  totalSamples)
+            )
+          )
+        : 100;
+
+    return {
+      score,
+      status:
+        score >= 90
+          ? 'healthy'
+          : score >= 70
+            ? 'degraded'
+            : 'unhealthy',
+      totalSamples,
+      totalViolations,
+      operations
+    };
+  }
+
+  function mutationIntentKey(type, attributeName = '') {
+    return `${String(type || 'unknown')}:${String(attributeName || '')}`;
+  }
+
+  function markMutationIntent(node, type, attributeName = '') {
+    if (!node || (typeof node !== 'object' && typeof node !== 'function')) {
+      return;
+    }
+
+    let intents = runtime.mutationIntentMap.get(node);
+    if (!intents) {
+      intents = new Map();
+      runtime.mutationIntentMap.set(node, intents);
+    }
+
+    intents.set(
+      mutationIntentKey(type, attributeName),
+      Date.now() + CONFIG.mutationIntentTtlMs
+    );
+  }
+
+  function hasMutationIntent(record) {
+    const intents = runtime.mutationIntentMap.get(record?.target);
+    if (!intents) {
+      return false;
+    }
+
+    const now = Date.now();
+    const key = mutationIntentKey(
+      record.type,
+      record.type === 'attributes' ? record.attributeName : ''
+    );
+    const expiresAt = Number(intents.get(key) || 0);
+
+    if (expiresAt < now) {
+      intents.delete(key);
+      return false;
+    }
+
+    return true;
+  }
+
+  function attributeMutations(records = []) {
+    const externalRecords = [];
+    let internal = 0;
+    let external = 0;
+
+    for (const record of records || []) {
+      if (hasMutationIntent(record)) {
+        internal += 1;
+      } else {
+        external += 1;
+        externalRecords.push(record);
+      }
+    }
+
+    const source = internal > 0 && external > 0
+      ? 'mixed'
+      : internal > 0
+        ? 'ultrawide'
+        : 'external';
+
+    const result = {
+      source,
+      internal,
+      external,
+      total: internal + external,
+      externalRecords
+    };
+
+    runtime.lastMutationAttribution = result;
+    if (source === 'ultrawide') runtime.internalMutationBatchCount += 1;
+    else if (source === 'mixed') runtime.mixedMutationBatchCount += 1;
+    else runtime.externalMutationBatchCount += 1;
+
+    return result;
+  }
+
   function setAttributeValue(element, name, value) {
     if (!element || element.getAttribute(name) === value) {
       return false;
     }
 
+    markMutationIntent(element, 'attributes', name);
     element.setAttribute(name, value);
     return true;
   }
@@ -545,6 +1290,7 @@
     }
 
     if (element.hasAttribute(name)) {
+      markMutationIntent(element, 'attributes', name);
       element.removeAttribute(name);
       return true;
     }
@@ -560,9 +1306,64 @@
   }
 
   function nowMs() {
-    return typeof performance?.now === 'function'
+    return (
+      typeof performance !== 'undefined' &&
+      typeof performance.now === 'function'
+    )
       ? performance.now()
       : Date.now();
+  }
+
+  function requestNextFrame(callback) {
+    if (typeof requestAnimationFrame === 'function') {
+      return requestAnimationFrame(callback);
+    }
+
+    return window.setTimeout(callback, 16);
+  }
+
+  function cancelNextFrame(id) {
+    if (!id) {
+      return;
+    }
+
+    if (typeof cancelAnimationFrame === 'function') {
+      cancelAnimationFrame(id);
+      return;
+    }
+
+    clearTimeout(id);
+  }
+
+  function getStyleText(id) {
+    return document.getElementById(id)?.textContent || '';
+  }
+
+  function parseStoredSettings(value) {
+    if (
+      value &&
+      typeof value === 'object' &&
+      !Array.isArray(value)
+    ) {
+      return value;
+    }
+
+    if (typeof value !== 'string') {
+      return null;
+    }
+
+    try {
+      const parsed = JSON.parse(value);
+      return (
+        parsed &&
+        typeof parsed === 'object' &&
+        !Array.isArray(parsed)
+      )
+        ? parsed
+        : null;
+    } catch (_) {
+      return null;
+    }
   }
 
   function hasConnectedMarker(attribute) {
@@ -603,13 +1404,15 @@
   function readStorage(key) {
     try {
       if (hasGmStorage()) {
-        return GM_getValue(key, null);
+        return parseStoredSettings(
+          GM_getValue(key, null)
+        );
       }
     } catch (_) {}
 
     try {
       const raw = localStorage.getItem(key);
-      return raw ? JSON.parse(raw) : null;
+      return parseStoredSettings(raw);
     } catch (_) {
       return null;
     }
@@ -787,6 +1590,11 @@
       output.performanceTelemetry
     );
 
+    output.debugOverlay = normalizeBoolean(
+      input.debugOverlay,
+      output.debugOverlay
+    );
+
     output.closeSettingsOnBackdrop = normalizeBoolean(
       input.closeSettingsOnBackdrop ??
         input.optionsCloseOnBackdrop,
@@ -837,7 +1645,16 @@
   }
 
   function removeById(id) {
-    document.getElementById(id)?.remove();
+    const element = document.getElementById(id);
+    if (!element) {
+      return false;
+    }
+
+    if (element.parentNode) {
+      markMutationIntent(element.parentNode, 'childList');
+    }
+    element.remove();
+    return true;
   }
 
   function cleanupLegacyArtifacts() {
@@ -878,7 +1695,7 @@
         document
           .querySelectorAll(`[${attribute}]`)
           .forEach((element) => {
-            element.removeAttribute(attribute);
+            setBooleanAttribute(element, attribute, false);
           });
       } catch (_) {}
     }
@@ -1016,6 +1833,45 @@
       : (window.innerWidth || 0);
   }
 
+  function getExpectedContentWidthPx(
+    paneWidth = getAdaptiveWidth()
+  ) {
+    const width =
+      Math.max(0, Number(paneWidth || 0));
+
+    const viewportWidth =
+      Math.max(
+        0,
+        Number(window.innerWidth || width)
+      );
+
+    const gutter = Math.min(
+      settings.gutterMax,
+      Math.max(
+        settings.gutterMin,
+        viewportWidth *
+          (settings.gutterVw / 100)
+      )
+    );
+
+    const available =
+      Math.max(
+        0,
+        width - (gutter * 2)
+      );
+
+    if (settings.cap === 'none') {
+      return available;
+    }
+
+    const cap =
+      Number(settings.cap);
+
+    return Number.isFinite(cap)
+      ? Math.min(available, cap)
+      : available;
+  }
+
   function isWideActive() {
     if (!settings.enabled || !settings.wide) {
       return false;
@@ -1050,9 +1906,7 @@
   function detectDomCapabilities() {
     const queryOne = (selector) => {
       try {
-        return Boolean(
-          document.querySelector(selector)
-        );
+        return Boolean(document.querySelector(selector));
       } catch (_) {
         return false;
       }
@@ -1060,77 +1914,57 @@
 
     const queryCount = (selector) => {
       try {
-        return document.querySelectorAll(
-          selector
-        ).length;
+        return document.querySelectorAll(selector).length;
       } catch (_) {
         return 0;
       }
     };
 
-    const virtualizedTurnCount =
-      queryCount(
-        '[data-turn-key],[data-content-search-turn-key]'
-      );
-
-    const fallbackTurnCount =
-      queryCount(SELECTOR.fallbackMessages);
+    const virtualizedTurnCount = queryCount(
+      '[data-turn-key],[data-content-search-turn-key]'
+    );
+    const fallbackTurnCount = queryCount(SELECTOR.fallbackMessages);
 
     const capabilities = {
-      transcriptRoot:
-        queryOne(
-          '[data-thread-user-message-navigation-content]'
-        ),
-      conversationTarget:
-        queryOne(
-          '[data-thread-find-target="conversation"]'
-        ),
-      threadBottomContainer:
-        queryOne('#thread-bottom-container'),
-      promptTextarea:
-        queryOne(
-          '#prompt-textarea,[data-testid="prompt-textarea"]'
-        ),
-      virtualizedTurns:
-        virtualizedTurnCount > 0,
+      mainPresent: queryOne(SELECTOR.main),
+      transcriptRoot: queryOne(
+        '[data-thread-user-message-navigation-content]'
+      ),
+      conversationTarget: queryOne(
+        '[data-thread-find-target="conversation"]'
+      ),
+      threadBottomContainer: queryOne('#thread-bottom-container'),
+      promptTextarea: queryOne(
+        '#prompt-textarea,[data-testid="prompt-textarea"]'
+      ),
+      virtualizedTurns: virtualizedTurnCount > 0,
       virtualizedTurnCount,
-      fallbackTurns:
-        fallbackTurnCount > 0,
+      fallbackTurns: fallbackTurnCount > 0,
       fallbackTurnCount,
-      threadVariableWrappers:
-        queryOne(
-          '[class*="thread-content-max-width"],[class*="thread-body-max-width"]'
-        ),
-      splitView:
-        runtime.canvasDetected,
-      resizeObserver:
-        typeof ResizeObserver === 'function'
+      threadVariableWrappers: queryOne(
+        '[class*="thread-content-max-width"],[class*="thread-body-max-width"]'
+      ),
+      splitView: runtime.canvasDetected,
+      resizeObserver: typeof ResizeObserver === 'function'
     };
 
-    let strategy = 'unknown';
+    const selection = selectDomStrategy(capabilities);
+    capabilities.strategy = selection.id;
+    capabilities.strategyCandidate = selection.candidateId;
+    capabilities.strategyConfidence = selection.confidence;
+    capabilities.strategyThreshold = selection.threshold;
+    capabilities.strategyLowConfidence = selection.lowConfidence;
+    capabilities.strategyCandidates = selection.candidates;
+
+    runtime.lastCapabilities = capabilities;
 
     if (
-      capabilities.transcriptRoot &&
-      capabilities.virtualizedTurns
+      !runtime.lastSelectorHealthAt ||
+      Date.now() - runtime.lastSelectorHealthAt >
+        CONFIG.selectorHealthStaleMs
     ) {
-      strategy = 'virtualized-thread';
-    } else if (
-      capabilities.conversationTarget &&
-      (
-        capabilities.virtualizedTurns ||
-        capabilities.fallbackTurns
-      )
-    ) {
-      strategy = 'conversation-target';
-    } else if (
-      capabilities.virtualizedTurns ||
-      capabilities.fallbackTurns
-    ) {
-      strategy = 'turn-markers';
+      updateSelectorHealth();
     }
-
-    capabilities.strategy = strategy;
-    runtime.lastCapabilities = capabilities;
 
     return capabilities;
   }
@@ -1166,6 +2000,13 @@
     ) {
       score -= 20;
       issues.push('Composer root/input not detected');
+    }
+
+    if (capabilities.strategyLowConfidence) {
+      score -= 15;
+      issues.push(
+        `DOM strategy confidence ${capabilities.strategyConfidence || 0}% is below ${capabilities.strategyThreshold || CONFIG.strategyMinConfidence}%`
+      );
     }
 
     if (
@@ -1229,6 +2070,12 @@
       return;
     }
 
+    if (!settings.enabled) {
+      clearRootState();
+      syncSettingsModal();
+      return;
+    }
+
     setRootState();
     syncSettingsModal();
     requestRepair(
@@ -1265,8 +2112,17 @@
     }
 
     try {
+      const epoch =
+        currentRuntimeEpoch();
+
       runtime.paneResizeObserver =
-        new ResizeObserver(onPaneResize);
+        new ResizeObserver(
+          guardRuntimeEpoch(
+            onPaneResize,
+            'pane-resize-observer',
+            epoch
+          )
+        );
 
       runtime.paneResizeObserver.observe(pane);
       return true;
@@ -1622,42 +2478,71 @@ ${safeMediaCss}
   --uwc-ui-bg:var(--main-surface-primary,Canvas);
   --uwc-ui-text:var(--text-primary,CanvasText);
   position:fixed!important;
-  right:20px!important;
-  bottom:20px!important;
+  right:18px!important;
+  bottom:18px!important;
   z-index:2147483647!important;
-  max-width:min(420px,calc(100vw - 40px))!important;
+  max-width:min(440px,calc(100vw - 36px))!important;
   padding:11px 14px!important;
   border:1px solid var(--border-light,color-mix(in srgb,var(--uwc-ui-text) 12%,transparent))!important;
-  border-radius:14px!important;
-  background:var(--uwc-ui-bg)!important;
+  border-radius:13px!important;
+  background:color-mix(in srgb,var(--uwc-ui-bg) 96%,transparent)!important;
   color:var(--uwc-ui-text)!important;
-  box-shadow:0 12px 34px rgba(0,0,0,.22)!important;
+  box-shadow:0 14px 40px rgba(0,0,0,.24)!important;
   font:13px/1.4 ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif!important;
+  pointer-events:none!important;
+  backdrop-filter:blur(18px) saturate(1.15)!important;
+}
+
+#${ID.debugOverlay}{
+  --uwc-debug-bg:rgba(12,18,22,.9);
+  --uwc-debug-text:#d8fff4;
+  --uwc-debug-border:rgba(16,163,127,.46);
+  position:fixed!important;
+  left:16px!important;
+  bottom:16px!important;
+  z-index:2147483645!important;
+  display:grid!important;
+  gap:4px!important;
+  max-width:min(440px,calc(100vw - 32px))!important;
+  padding:10px 12px!important;
+  border:1px solid var(--uwc-debug-border)!important;
+  border-radius:12px!important;
+  background:var(--uwc-debug-bg)!important;
+  color:var(--uwc-debug-text)!important;
+  box-shadow:0 14px 36px rgba(0,0,0,.28)!important;
+  font:11px/1.35 ui-monospace,SFMono-Regular,Consolas,monospace!important;
   pointer-events:none!important;
   backdrop-filter:blur(14px)!important;
 }
 
+#${ID.debugOverlay} strong{
+  font-weight:700!important;
+  color:#fff!important;
+}
+
 #${ID.modal}{
   --uwc-accent:#10a37f;
+  --uwc-accent-strong:#0d8f70;
   --uwc-danger:#ef4444;
+  --uwc-warning:#d97706;
   --uwc-ui-bg:var(--main-surface-primary,Canvas);
   --uwc-ui-bg-secondary:var(--main-surface-secondary,color-mix(in srgb,CanvasText 4%,Canvas));
   --uwc-ui-bg-tertiary:var(--main-surface-tertiary,color-mix(in srgb,CanvasText 7%,Canvas));
   --uwc-ui-text:var(--text-primary,CanvasText);
   --uwc-ui-muted:var(--text-secondary,color-mix(in srgb,CanvasText 62%,transparent));
-  --uwc-ui-border:var(--border-light,color-mix(in srgb,CanvasText 12%,transparent));
-  --uwc-ui-border-strong:var(--border-medium,color-mix(in srgb,CanvasText 18%,transparent));
+  --uwc-ui-border:var(--border-light,color-mix(in srgb,CanvasText 11%,transparent));
+  --uwc-ui-border-strong:var(--border-medium,color-mix(in srgb,CanvasText 19%,transparent));
   position:fixed!important;
   inset:0!important;
   z-index:2147483646!important;
   display:flex!important;
   align-items:center!important;
   justify-content:center!important;
-  padding:24px!important;
-  background:rgba(0,0,0,.56)!important;
+  padding:22px!important;
+  background:rgba(0,0,0,.58)!important;
   color:var(--uwc-ui-text)!important;
   font:14px/1.45 ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif!important;
-  backdrop-filter:blur(3px)!important;
+  backdrop-filter:blur(7px)!important;
 }
 
 #${ID.modal} *{
@@ -1665,32 +2550,32 @@ ${safeMediaCss}
 }
 
 #${ID.modal} .uwc-panel{
-  width:min(860px,100%)!important;
-  max-height:min(90vh,920px)!important;
+  width:min(920px,100%)!important;
+  max-height:min(92vh,960px)!important;
   overflow:auto!important;
   overscroll-behavior:contain!important;
   scrollbar-gutter:stable!important;
   border:1px solid var(--uwc-ui-border)!important;
-  border-radius:18px!important;
+  border-radius:20px!important;
   background:var(--uwc-ui-bg)!important;
   color:var(--uwc-ui-text)!important;
   box-shadow:
-    0 24px 80px rgba(0,0,0,.38),
-    0 2px 10px rgba(0,0,0,.14)!important;
+    0 32px 100px rgba(0,0,0,.42),
+    0 4px 18px rgba(0,0,0,.16)!important;
 }
 
 #${ID.modal} .uwc-header{
   position:sticky!important;
   top:0!important;
-  z-index:3!important;
+  z-index:4!important;
   display:flex!important;
   align-items:center!important;
   justify-content:space-between!important;
   gap:18px!important;
-  padding:18px 20px!important;
+  padding:17px 20px!important;
   border-bottom:1px solid var(--uwc-ui-border)!important;
-  background:color-mix(in srgb,var(--uwc-ui-bg) 94%,transparent)!important;
-  backdrop-filter:blur(18px)!important;
+  background:color-mix(in srgb,var(--uwc-ui-bg) 95%,transparent)!important;
+  backdrop-filter:blur(20px) saturate(1.1)!important;
 }
 
 #${ID.modal} .uwc-header-copy{
@@ -1706,10 +2591,10 @@ ${safeMediaCss}
 
 #${ID.modal} .uwc-title{
   margin:0!important;
-  font-size:18px!important;
-  line-height:1.25!important;
-  font-weight:650!important;
-  letter-spacing:-.015em!important;
+  font-size:19px!important;
+  line-height:1.2!important;
+  font-weight:680!important;
+  letter-spacing:-.018em!important;
 }
 
 #${ID.modal} .uwc-version{
@@ -1733,11 +2618,11 @@ ${safeMediaCss}
 #${ID.modal} .uwc-close{
   display:grid!important;
   place-items:center!important;
-  width:34px!important;
-  min-width:34px!important;
-  height:34px!important;
+  width:36px!important;
+  min-width:36px!important;
+  height:36px!important;
   padding:0!important;
-  border-color:transparent!important;
+  border:1px solid transparent!important;
   border-radius:10px!important;
   background:transparent!important;
   color:var(--uwc-ui-muted)!important;
@@ -1746,6 +2631,7 @@ ${safeMediaCss}
 }
 
 #${ID.modal} .uwc-close:hover{
+  border-color:var(--uwc-ui-border)!important;
   background:var(--uwc-ui-bg-secondary)!important;
   color:var(--uwc-ui-text)!important;
 }
@@ -1755,62 +2641,131 @@ ${safeMediaCss}
 }
 
 #${ID.modal} .uwc-status{
-  display:grid!important;
-  grid-template-columns:auto minmax(0,1fr)!important;
-  align-items:start!important;
-  column-gap:10px!important;
-  row-gap:2px!important;
-  margin:0 0 16px!important;
-  padding:13px 14px!important;
-  border:1px solid color-mix(in srgb,var(--uwc-accent) 28%,var(--uwc-ui-border))!important;
-  border-radius:14px!important;
-  background:color-mix(in srgb,var(--uwc-accent) 7%,var(--uwc-ui-bg))!important;
-  font-size:12px!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:space-between!important;
+  gap:14px!important;
+  margin:0 0 12px!important;
+  padding:14px 15px!important;
+  border:1px solid color-mix(in srgb,var(--uwc-accent) 25%,var(--uwc-ui-border))!important;
+  border-radius:15px!important;
+  background:
+    linear-gradient(135deg,
+      color-mix(in srgb,var(--uwc-accent) 8%,var(--uwc-ui-bg)),
+      var(--uwc-ui-bg-secondary))!important;
 }
 
-#${ID.modal} .uwc-status::before{
+#${ID.modal} .uwc-status[data-state="inactive"]{
+  border-color:var(--uwc-ui-border)!important;
+  background:var(--uwc-ui-bg-secondary)!important;
+}
+
+#${ID.modal} .uwc-status-main{
+  display:grid!important;
+  grid-template-columns:auto minmax(0,1fr)!important;
+  gap:2px 10px!important;
+  min-width:0!important;
+}
+
+#${ID.modal} .uwc-status-main::before{
   content:""!important;
-  width:8px!important;
-  height:8px!important;
+  grid-row:1 / span 2!important;
+  align-self:start!important;
+  width:9px!important;
+  height:9px!important;
   margin-top:5px!important;
   border-radius:999px!important;
   background:var(--uwc-accent)!important;
-  box-shadow:0 0 0 3px color-mix(in srgb,var(--uwc-accent) 14%,transparent)!important;
+  box-shadow:0 0 0 4px color-mix(in srgb,var(--uwc-accent) 14%,transparent)!important;
+}
+
+#${ID.modal} .uwc-status[data-state="inactive"] .uwc-status-main::before{
+  background:var(--uwc-ui-muted)!important;
+  box-shadow:none!important;
 }
 
 #${ID.modal} .uwc-status strong{
-  grid-column:2!important;
   color:var(--uwc-ui-text)!important;
   font-weight:650!important;
 }
 
-#${ID.modal} .uwc-status span{
-  grid-column:2!important;
+#${ID.modal} .uwc-status-detail{
   color:var(--uwc-ui-muted)!important;
+  font-size:11px!important;
+  white-space:normal!important;
+}
+
+#${ID.modal} .uwc-health-pill{
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  min-width:74px!important;
+  min-height:30px!important;
+  padding:5px 9px!important;
+  border:1px solid color-mix(in srgb,var(--uwc-accent) 32%,var(--uwc-ui-border))!important;
+  border-radius:999px!important;
+  background:color-mix(in srgb,var(--uwc-accent) 8%,var(--uwc-ui-bg))!important;
+  color:var(--uwc-ui-text)!important;
+  font:650 11px/1 ui-monospace,SFMono-Regular,Consolas,monospace!important;
+  white-space:nowrap!important;
+}
+
+#${ID.modal} .uwc-overview{
+  display:grid!important;
+  grid-template-columns:repeat(6,minmax(0,1fr))!important;
+  gap:8px!important;
+  margin:0 0 14px!important;
+}
+
+#${ID.modal} .uwc-metric{
+  min-width:0!important;
+  padding:10px!important;
+  border:1px solid var(--uwc-ui-border)!important;
+  border-radius:12px!important;
+  background:var(--uwc-ui-bg-secondary)!important;
+}
+
+#${ID.modal} .uwc-metric-label{
+  display:block!important;
+  margin-bottom:4px!important;
+  color:var(--uwc-ui-muted)!important;
+  font-size:9px!important;
+  font-weight:650!important;
+  text-transform:uppercase!important;
+  letter-spacing:.07em!important;
+}
+
+#${ID.modal} .uwc-metric-value{
+  display:block!important;
+  overflow:hidden!important;
+  color:var(--uwc-ui-text)!important;
+  font:650 12px/1.25 ui-monospace,SFMono-Regular,Consolas,monospace!important;
+  text-overflow:ellipsis!important;
+  white-space:nowrap!important;
 }
 
 #${ID.modal} .uwc-section{
-  margin:0 0 14px!important;
-  padding:15px!important;
+  margin:0 0 12px!important;
+  padding:14px!important;
   border:1px solid var(--uwc-ui-border)!important;
   border-radius:14px!important;
   background:var(--uwc-ui-bg-secondary)!important;
 }
 
 #${ID.modal} .uwc-section h3{
-  margin:0 0 12px!important;
+  margin:0 0 11px!important;
   color:var(--uwc-ui-muted)!important;
-  font-size:11px!important;
+  font-size:10px!important;
   line-height:1.2!important;
-  font-weight:650!important;
+  font-weight:700!important;
   text-transform:uppercase!important;
-  letter-spacing:.075em!important;
+  letter-spacing:.08em!important;
 }
 
 #${ID.modal} .uwc-grid{
   display:grid!important;
   grid-template-columns:repeat(2,minmax(0,1fr))!important;
-  gap:9px!important;
+  gap:8px!important;
 }
 
 #${ID.modal} .uwc-field{
@@ -1818,10 +2773,10 @@ ${safeMediaCss}
   flex-direction:column!important;
   justify-content:center!important;
   gap:6px!important;
-  min-height:60px!important;
-  padding:10px 11px!important;
+  min-height:58px!important;
+  padding:9px 10px!important;
   border:1px solid transparent!important;
-  border-radius:12px!important;
+  border-radius:11px!important;
   background:var(--uwc-ui-bg)!important;
 }
 
@@ -1835,15 +2790,16 @@ ${safeMediaCss}
   grid-template-areas:"copy toggle"!important;
   align-items:center!important;
   gap:12px!important;
-  min-height:60px!important;
-  padding:10px 11px!important;
+  min-height:58px!important;
+  padding:9px 10px!important;
   border:1px solid transparent!important;
-  border-radius:12px!important;
+  border-radius:11px!important;
   background:var(--uwc-ui-bg)!important;
   cursor:pointer!important;
   transition:
     background-color .14s ease,
-    border-color .14s ease!important;
+    border-color .14s ease,
+    box-shadow .14s ease!important;
 }
 
 #${ID.modal} .uwc-check:hover{
@@ -1853,7 +2809,7 @@ ${safeMediaCss}
 
 #${ID.modal} .uwc-check:has(input:focus-visible){
   border-color:color-mix(in srgb,var(--uwc-accent) 65%,var(--uwc-ui-border))!important;
-  box-shadow:0 0 0 2px color-mix(in srgb,var(--uwc-accent) 18%,transparent)!important;
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--uwc-accent) 14%,transparent)!important;
 }
 
 #${ID.modal} .uwc-check input[type="checkbox"]{
@@ -1872,18 +2828,16 @@ ${safeMediaCss}
   grid-area:copy!important;
   min-width:0!important;
   color:var(--uwc-ui-text)!important;
-  font-weight:500!important;
+  font-weight:520!important;
 }
 
 #${ID.modal} .uwc-toggle-state{
   grid-area:toggle!important;
   position:relative!important;
   display:inline-flex!important;
-  align-items:center!important;
-  justify-content:flex-end!important;
-  width:38px!important;
-  min-width:38px!important;
-  height:22px!important;
+  width:40px!important;
+  min-width:40px!important;
+  height:23px!important;
   padding:0!important;
   overflow:hidden!important;
   border:1px solid var(--uwc-ui-border-strong)!important;
@@ -1901,8 +2855,8 @@ ${safeMediaCss}
   position:absolute!important;
   left:3px!important;
   top:3px!important;
-  width:14px!important;
-  height:14px!important;
+  width:15px!important;
+  height:15px!important;
   border-radius:999px!important;
   background:var(--uwc-ui-muted)!important;
   transition:
@@ -1916,19 +2870,19 @@ ${safeMediaCss}
 }
 
 #${ID.modal} .uwc-check input:checked ~ .uwc-toggle-state::after{
-  transform:translateX(16px)!important;
+  transform:translateX(17px)!important;
   background:#fff!important;
 }
 
 #${ID.modal} label{
-  font-weight:500!important;
+  font-weight:520!important;
 }
 
 #${ID.modal} .uwc-hint{
   display:block!important;
   margin-top:2px!important;
   color:var(--uwc-ui-muted)!important;
-  font-size:11px!important;
+  font-size:10.5px!important;
   line-height:1.35!important;
   font-weight:400!important;
 }
@@ -1967,7 +2921,7 @@ ${safeMediaCss}
 #${ID.modal} select:focus,
 #${ID.modal} textarea:focus{
   border-color:var(--uwc-accent)!important;
-  box-shadow:0 0 0 2px color-mix(in srgb,var(--uwc-accent) 18%,transparent)!important;
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--uwc-accent) 13%,transparent)!important;
 }
 
 #${ID.modal} button{
@@ -1977,7 +2931,7 @@ ${safeMediaCss}
   border-radius:9px!important;
   background:var(--uwc-ui-bg)!important;
   cursor:pointer!important;
-  font-weight:550!important;
+  font-weight:560!important;
   transition:
     background-color .14s ease,
     border-color .14s ease,
@@ -1995,8 +2949,10 @@ ${safeMediaCss}
 
 #${ID.modal} button:focus-visible,
 #${ID.modal} input:focus-visible,
-#${ID.modal} select:focus-visible{
-  outline:none!important;
+#${ID.modal} select:focus-visible,
+#${ID.modal} summary:focus-visible{
+  outline:2px solid color-mix(in srgb,var(--uwc-accent) 72%,transparent)!important;
+  outline-offset:2px!important;
 }
 
 #${ID.modal} .uwc-primary{
@@ -2006,8 +2962,8 @@ ${safeMediaCss}
 }
 
 #${ID.modal} .uwc-primary:hover{
-  border-color:color-mix(in srgb,var(--uwc-accent) 88%,#000)!important;
-  background:color-mix(in srgb,var(--uwc-accent) 88%,#000)!important;
+  border-color:var(--uwc-accent-strong)!important;
+  background:var(--uwc-accent-strong)!important;
 }
 
 #${ID.modal} .uwc-danger{
@@ -2019,6 +2975,84 @@ ${safeMediaCss}
   background:color-mix(in srgb,var(--uwc-danger) 7%,var(--uwc-ui-bg))!important;
 }
 
+#${ID.modal} .uwc-health-breakdown{
+  display:grid!important;
+  grid-template-columns:repeat(6,minmax(0,1fr))!important;
+  gap:7px!important;
+  margin:0 0 12px!important;
+}
+
+#${ID.modal} .uwc-health-item{
+  display:flex!important;
+  align-items:center!important;
+  justify-content:space-between!important;
+  gap:8px!important;
+  min-width:0!important;
+  padding:8px 9px!important;
+  border:1px solid var(--uwc-ui-border)!important;
+  border-radius:10px!important;
+  background:var(--uwc-ui-bg)!important;
+}
+
+#${ID.modal} .uwc-health-label{
+  overflow:hidden!important;
+  color:var(--uwc-ui-muted)!important;
+  font-size:9px!important;
+  font-weight:650!important;
+  text-overflow:ellipsis!important;
+  text-transform:uppercase!important;
+  letter-spacing:.05em!important;
+  white-space:nowrap!important;
+}
+
+#${ID.modal} .uwc-health-value{
+  color:var(--uwc-ui-text)!important;
+  font:700 11px/1 ui-monospace,SFMono-Regular,Consolas,monospace!important;
+}
+
+#${ID.modal} .uwc-advanced{
+  margin:0 0 12px!important;
+  overflow:hidden!important;
+  border:1px solid var(--uwc-ui-border)!important;
+  border-radius:14px!important;
+  background:var(--uwc-ui-bg-secondary)!important;
+}
+
+#${ID.modal} .uwc-advanced > summary{
+  display:flex!important;
+  align-items:center!important;
+  justify-content:space-between!important;
+  gap:12px!important;
+  min-height:46px!important;
+  padding:12px 14px!important;
+  cursor:pointer!important;
+  color:var(--uwc-ui-text)!important;
+  font-weight:620!important;
+  list-style:none!important;
+}
+
+#${ID.modal} .uwc-advanced > summary::-webkit-details-marker{
+  display:none!important;
+}
+
+#${ID.modal} .uwc-advanced > summary::after{
+  content:"+"!important;
+  color:var(--uwc-ui-muted)!important;
+  font:600 17px/1 ui-monospace,SFMono-Regular,Consolas,monospace!important;
+}
+
+#${ID.modal} .uwc-advanced[open] > summary::after{
+  content:"−"!important;
+}
+
+#${ID.modal} .uwc-advanced-body{
+  padding:0 12px 12px!important;
+}
+
+#${ID.modal} .uwc-advanced-body .uwc-section{
+  margin-bottom:8px!important;
+}
+
 #${ID.modal} .uwc-shortcuts{
   display:grid!important;
   grid-template-columns:repeat(4,minmax(0,1fr))!important;
@@ -2028,7 +3062,7 @@ ${safeMediaCss}
 #${ID.modal} .uwc-shortcuts span{
   display:flex!important;
   align-items:center!important;
-  min-height:34px!important;
+  min-height:33px!important;
   padding:7px 9px!important;
   border:1px solid var(--uwc-ui-border)!important;
   border-radius:9px!important;
@@ -2037,28 +3071,42 @@ ${safeMediaCss}
   font:11px/1.3 ui-monospace,SFMono-Regular,Consolas,monospace!important;
 }
 
+#${ID.modal} .uwc-inline-actions{
+  display:flex!important;
+  flex-wrap:wrap!important;
+  gap:8px!important;
+  padding:4px 0 0!important;
+}
+
 #${ID.modal} .uwc-actions{
   position:sticky!important;
   bottom:0!important;
-  z-index:3!important;
+  z-index:4!important;
   display:flex!important;
   flex-wrap:wrap!important;
   align-items:center!important;
   justify-content:flex-end!important;
   gap:8px!important;
-  margin:18px -20px 0!important;
-  padding:14px 20px!important;
+  margin:16px -20px 0!important;
+  padding:13px 20px!important;
   border-top:1px solid var(--uwc-ui-border)!important;
-  background:color-mix(in srgb,var(--uwc-ui-bg) 94%,transparent)!important;
-  backdrop-filter:blur(18px)!important;
+  background:color-mix(in srgb,var(--uwc-ui-bg) 95%,transparent)!important;
+  backdrop-filter:blur(20px) saturate(1.1)!important;
 }
 
 #${ID.modal} .uwc-actions::before{
-  content:"Changes are saved automatically and applied when settings are closed."!important;
+  content:"Settings save automatically. Closing applies persisted changes."!important;
   margin-right:auto!important;
   color:var(--uwc-ui-muted)!important;
-  font-size:11px!important;
+  font-size:10.5px!important;
   line-height:1.35!important;
+}
+
+@media (max-width:900px){
+  #${ID.modal} .uwc-overview,
+  #${ID.modal} .uwc-health-breakdown{
+    grid-template-columns:repeat(3,minmax(0,1fr))!important;
+  }
 }
 
 @media (max-width:700px){
@@ -2073,11 +3121,15 @@ ${safeMediaCss}
   }
 
   #${ID.modal} .uwc-header{
-    padding:15px!important;
+    padding:14px 15px!important;
   }
 
   #${ID.modal} .uwc-body{
-    padding:14px 15px 0!important;
+    padding:13px 15px 0!important;
+  }
+
+  #${ID.modal} .uwc-status{
+    align-items:flex-start!important;
   }
 
   #${ID.modal} .uwc-grid{
@@ -2089,7 +3141,7 @@ ${safeMediaCss}
   }
 
   #${ID.modal} .uwc-actions{
-    margin:16px -15px 0!important;
+    margin:14px -15px 0!important;
     padding:12px 15px!important;
   }
 
@@ -2098,7 +3150,20 @@ ${safeMediaCss}
   }
 }
 
-@media (max-width:460px){
+@media (max-width:520px){
+  #${ID.modal} .uwc-overview,
+  #${ID.modal} .uwc-health-breakdown{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  }
+
+  #${ID.modal} .uwc-status{
+    flex-direction:column!important;
+  }
+
+  #${ID.modal} .uwc-health-pill{
+    align-self:flex-start!important;
+  }
+
   #${ID.modal} .uwc-shortcuts{
     grid-template-columns:1fr!important;
   }
@@ -2164,30 +3229,68 @@ ${safeMediaCss}
       return false;
     }
 
+    let changed = false;
     let style = document.getElementById(id);
+
+    if (
+      style &&
+      (
+        style.tagName !== 'STYLE' ||
+        style.parentNode !== head
+      )
+    ) {
+      if (style.parentNode) markMutationIntent(style.parentNode, 'childList');
+      style.remove();
+      style = null;
+      changed = true;
+    }
+
+    try {
+      const duplicates = Array.from(
+        document.querySelectorAll(`[id="${id}"]`)
+      );
+
+      for (const duplicate of duplicates) {
+        if (duplicate !== style) {
+          if (duplicate.parentNode) markMutationIntent(duplicate.parentNode, 'childList');
+          duplicate.remove();
+          changed = true;
+        }
+      }
+    } catch (_) {}
 
     if (!style) {
       style = document.createElement('style');
       style.id = id;
       style.type = 'text/css';
+      markMutationIntent(head, 'childList');
       head.appendChild(style);
+      changed = true;
     }
 
-    style.setAttribute('data-version', VERSION);
+    if (
+      style.getAttribute('data-version') !== VERSION
+    ) {
+      markMutationIntent(style, 'attributes', 'data-version');
+      style.setAttribute('data-version', VERSION);
+      changed = true;
+    }
 
     if (style.textContent !== content) {
+      markMutationIntent(style, 'childList');
       style.textContent = content;
+      changed = true;
     }
 
-    return true;
+    return changed;
   }
 
   function removeMainStyle() {
-    removeById(ID.style);
+    return removeById(ID.style);
   }
 
   function removeUiStyle() {
-    removeById(ID.uiStyle);
+    return removeById(ID.uiStyle);
   }
 
   function setRootState() {
@@ -2238,36 +3341,70 @@ ${safeMediaCss}
     );
   }
 
-  function clearRootState() {
+  function rootStateMatches() {
     const root = getRoot();
 
     if (!root) {
-      return;
+      return false;
     }
 
-    root.removeAttribute(
-      ATTR.enabled
-    );
+    if (!settings.enabled) {
+      return ![
+        ATTR.version,
+        ATTR.cap,
+        ATTR.enabled,
+        ATTR.wide,
+        ATTR.left,
+        ATTR.canvas
+      ].some((attribute) => root.hasAttribute(attribute));
+    }
 
-    root.removeAttribute(
-      ATTR.wide
-    );
+    const expectedBoolean = (enabled) =>
+      enabled ? '1' : null;
 
-    root.removeAttribute(
-      ATTR.left
+    return (
+      root.getAttribute(ATTR.version) === VERSION &&
+      root.getAttribute(ATTR.cap) === settings.cap &&
+      root.getAttribute(ATTR.enabled) ===
+        expectedBoolean(settings.enabled) &&
+      root.getAttribute(ATTR.wide) ===
+        expectedBoolean(
+          settings.enabled &&
+          isWideActive() &&
+          !runtime.safeFallbackActive
+        ) &&
+      root.getAttribute(ATTR.left) ===
+        expectedBoolean(
+          settings.enabled &&
+          settings.left
+        ) &&
+      root.getAttribute(ATTR.canvas) ===
+        expectedBoolean(
+          settings.enabled &&
+          settings.canvasSafeMode &&
+          runtime.canvasDetected
+        )
     );
+  }
 
-    root.removeAttribute(
-      ATTR.canvas
-    );
+  function clearRootState() {
+    const root = getRoot();
+    if (!root) {
+      return false;
+    }
 
-    root.removeAttribute(
-      ATTR.cap
-    );
-
-    root.removeAttribute(
+    let changed = false;
+    for (const attribute of [
+      ATTR.enabled,
+      ATTR.wide,
+      ATTR.left,
+      ATTR.canvas,
+      ATTR.cap,
       ATTR.version
-    );
+    ]) {
+      changed = setBooleanAttribute(root, attribute, false) || changed;
+    }
+    return changed;
   }
 
   function createDesiredMarkers() {
@@ -2306,16 +3443,13 @@ ${safeMediaCss}
           !element.isConnected ||
           !next.has(element)
         ) {
-          element.removeAttribute(attribute);
+          setBooleanAttribute(element, attribute, false);
         }
       }
 
       for (const element of next) {
         if (!previous.has(element)) {
-          element.setAttribute(
-            attribute,
-            '1'
-          );
+          setBooleanAttribute(element, attribute, true);
         }
       }
 
@@ -2334,7 +3468,7 @@ ${safeMediaCss}
 
       for (const element of elements) {
         if (element?.removeAttribute) {
-          element.removeAttribute(attribute);
+          setBooleanAttribute(element, attribute, false);
         }
       }
 
@@ -3044,34 +4178,1533 @@ ${safeMediaCss}
     }
   }
 
+  function recordRepairHistory(entry = {}) {
+    const item = {
+      at: Date.now(),
+      reason: String(entry.reason || 'repair'),
+      level: Number.isFinite(entry.level) ? entry.level : 0,
+      result: String(entry.result || 'scheduled'),
+      failures: Array.isArray(entry.failures) ? [...entry.failures] : [],
+      durationMs: Number.isFinite(entry.durationMs) ? entry.durationMs : 0,
+      planId: entry.planId || null,
+      actions: Array.isArray(entry.actions) ? [...entry.actions] : [],
+      conservative: Boolean(entry.conservative),
+      convergence: entry.convergence || null
+    };
+
+    runtime.repairHistory.push(item);
+
+    if (runtime.repairHistory.length > CONFIG.repairHistoryLimit) {
+      runtime.repairHistory.splice(
+        0,
+        runtime.repairHistory.length - CONFIG.repairHistoryLimit
+      );
+    }
+
+    return item;
+  }
+
+  function getRepairEffectivenessMetrics() {
+    const history =
+      runtime.repairHistory;
+
+    const executed = history.length;
+    const applied =
+      history.filter(
+        (item) =>
+          item.result === 'applied'
+      ).length;
+    const idempotent =
+      history.filter(
+        (item) =>
+          item.result === 'idempotent'
+      ).length;
+    const failed =
+      history.filter(
+        (item) =>
+          item.result === 'error'
+      ).length;
+    const escalated =
+      history.filter(
+        (item) =>
+          Number(item.level || 0) >= 4
+      ).length;
+
+    const successful =
+      applied + idempotent;
+
+    const totalDurationMs =
+      history.reduce(
+        (sum, item) =>
+          sum +
+          Number(item.durationMs || 0),
+        0
+      );
+
+    return {
+      requested:
+        runtime.repairRequestCount,
+      executed,
+      applied,
+      idempotent,
+      successful,
+      failed,
+      escalated,
+      coalesced:
+        runtime.coalescedRepairCount,
+      successRate:
+        executed > 0
+          ? successful / executed
+          : 1,
+      coalescingRate:
+        runtime.repairRequestCount > 0
+          ? runtime.coalescedRepairCount /
+            runtime.repairRequestCount
+          : 0,
+      averageDurationMs:
+        executed > 0
+          ? totalDurationMs / executed
+          : 0,
+      maxDurationMs:
+        history.reduce(
+          (max, item) =>
+            Math.max(
+              max,
+              Number(
+                item.durationMs || 0
+              )
+            ),
+          0
+        ),
+      convergencePasses:
+        runtime.convergencePassCount,
+      idempotentPasses:
+        runtime.idempotentPassCount,
+      lockContentions:
+        runtime.reconcileLockContentionCount,
+      queuedRequests:
+        runtime.queuedReconciliationRequestCount,
+      queuedRuns:
+        runtime.queuedReconciliationRunCount
+    };
+  }
+
+  function computeDomFingerprint() {
+    const capabilities = detectDomCapabilities();
+    const parts = [
+      capabilities.strategy || 'unknown',
+      `sc${capabilities.strategyConfidence || 0}`,
+      capabilities.transcriptRoot ? 'tr1' : 'tr0',
+      capabilities.conversationTarget ? 'ct1' : 'ct0',
+      capabilities.threadBottomContainer ? 'tb1' : 'tb0',
+      capabilities.promptTextarea ? 'pt1' : 'pt0',
+      `vt${capabilities.virtualizedTurnCount || 0}`,
+      `ft${capabilities.fallbackTurnCount || 0}`,
+      runtime.canvasDetected ? 'sv1' : 'sv0'
+    ];
+
+    return parts.join('|');
+  }
+
+  function updateDomFingerprint(reason = 'scan') {
+    const next = computeDomFingerprint();
+    const previous = runtime.lastDomFingerprint;
+    const changed = Boolean(previous && previous !== next);
+
+    runtime.lastDomFingerprint = next;
+    runtime.lastDomFingerprintAt = Date.now();
+
+    if (changed) {
+      runtime.lastDomFingerprintChangeAt = Date.now();
+      runtime.domFingerprintChanges += 1;
+      pushDebugEvent('dom-fingerprint-change', {
+        reason,
+        previous,
+        next
+      });
+    }
+
+    return { changed, previous, current: next };
+  }
+
+  function findVisibleManagedElement(attribute) {
+    return Array.from(runtime.marked.get(attribute) || [])
+      .find(isVisibleElement) || null;
+  }
+
+  function verifyAppliedWidths() {
+    const pane = resolveActivePane();
+    const paneRect = getVisibleRect(pane);
+    const paneWidth = Number(paneRect?.width || 0);
+    const expected = getExpectedContentWidthPx(paneWidth);
+    const tolerance = Math.max(
+      CONFIG.widthTolerancePx,
+      expected * CONFIG.widthToleranceRatio
+    );
+
+    const turn = findVisibleManagedElement(ATTR.turn);
+    const composer = findVisibleManagedElement(ATTR.composer);
+    const turnWidth = Number(getVisibleRect(turn)?.width || 0);
+    const composerWidth = Number(getVisibleRect(composer)?.width || 0);
+
+    const shouldVerify = Boolean(
+      settings.enabled &&
+      isWideActive() &&
+      !runtime.safeFallbackActive &&
+      expected >= 320
+    );
+
+    const checks = {
+      turn: !shouldVerify || !turn ||
+        Math.abs(turnWidth - expected) <= tolerance ||
+        turnWidth >= expected * 0.90,
+      composer: !shouldVerify || !settings.widenComposer || !composer ||
+        Math.abs(composerWidth - expected) <= tolerance ||
+        composerWidth >= expected * 0.90,
+      paneBound: !shouldVerify ||
+        (!turnWidth || turnWidth <= paneWidth + 4) &&
+        (!composerWidth || composerWidth <= paneWidth + 4)
+    };
+
+    const result = {
+      ok: Object.values(checks).every(Boolean),
+      checkedAt: Date.now(),
+      paneWidth,
+      expectedWidth: expected,
+      tolerance,
+      turnWidth,
+      composerWidth,
+      checks
+    };
+
+    runtime.lastWidthVerification = result;
+    return result;
+  }
+
+  function deriveDesiredState() {
+    const desired = {
+      enabled: Boolean(settings.enabled),
+      wide: Boolean(
+        settings.enabled &&
+        isWideActive() &&
+        !runtime.safeFallbackActive
+      ),
+      left: Boolean(settings.enabled && settings.left),
+      canvas: Boolean(
+        settings.enabled &&
+        settings.canvasSafeMode &&
+        runtime.canvasDetected
+      ),
+      cap: settings.enabled ? settings.cap : null,
+      mainStyle: Boolean(settings.enabled),
+      uiStyle: true,
+      observers: Boolean(runtime.started),
+      paneObserver: Boolean(
+        runtime.started &&
+        typeof ResizeObserver === 'function' &&
+        resolveActivePane()
+      ),
+      markers: Boolean(settings.enabled),
+      fingerprint: computeDomFingerprint()
+    };
+
+    runtime.lastDesiredState = desired;
+    return desired;
+  }
+
+  function inspectActualState() {
+    const root = getRoot();
+    const actual = {
+      enabled: root?.getAttribute(ATTR.enabled) === '1',
+      wide: root?.getAttribute(ATTR.wide) === '1',
+      left: root?.getAttribute(ATTR.left) === '1',
+      canvas: root?.getAttribute(ATTR.canvas) === '1',
+      cap: root?.getAttribute(ATTR.cap),
+      version: root?.getAttribute(ATTR.version),
+      mainStyle: getStyleText(ID.style) === getMainCss(),
+      uiStyle: getStyleText(ID.uiStyle) === getUiCss(),
+      rootObserver: Boolean(runtime.rootObserver && runtime.observedRoot?.isConnected),
+      bodyObserver: Boolean(runtime.bodyObserver && runtime.observedBody?.isConnected),
+      headObserver: Boolean(runtime.headObserver && runtime.observedHead?.isConnected),
+      paneObserver: Boolean(runtime.paneResizeObserver && runtime.observedPane?.isConnected),
+      disconnectedMarkers: hasDisconnectedMarkers(),
+      turnMarker: hasConnectedMarker(ATTR.turn),
+      composerMarker: hasConnectedMarker(ATTR.composer),
+      fingerprint: computeDomFingerprint(),
+      width: verifyAppliedWidths()
+    };
+
+    runtime.lastActualState = actual;
+    return actual;
+  }
+
+  function compareDesiredState(desired, actual) {
+    const failures = [];
+    const actions = new Set();
+    const strategy = runtime.strategySelection || selectDomStrategy(
+      runtime.lastCapabilities || detectDomCapabilities()
+    );
+
+    if (desired.uiStyle !== actual.uiStyle) {
+      failures.push(FAILURE_CODE.UI_STYLE_INTEGRITY);
+      actions.add('styles');
+    }
+
+    if (desired.mainStyle !== actual.mainStyle) {
+      failures.push(
+        desired.mainStyle
+          ? FAILURE_CODE.MAIN_STYLE_INTEGRITY
+          : FAILURE_CODE.MAIN_STYLE_UNWANTED
+      );
+      actions.add('styles');
+    }
+
+    if (
+      desired.enabled !== actual.enabled ||
+      desired.wide !== actual.wide ||
+      desired.left !== actual.left ||
+      desired.canvas !== actual.canvas ||
+      desired.cap !== actual.cap ||
+      (desired.enabled && actual.version !== VERSION)
+    ) {
+      failures.push(FAILURE_CODE.ROOT_STATE_INTEGRITY);
+      actions.add('root');
+    }
+
+    if (
+      desired.observers &&
+      (!actual.rootObserver || !actual.bodyObserver || !actual.headObserver)
+    ) {
+      failures.push(FAILURE_CODE.OBSERVER_INTEGRITY);
+      actions.add('observers');
+    }
+
+    if (actual.disconnectedMarkers) {
+      failures.push(FAILURE_CODE.DISCONNECTED_MARKERS);
+      actions.add('markers');
+    }
+
+    if (
+      desired.markers &&
+      runtime.lastTurnCount > 0 &&
+      !actual.turnMarker
+    ) {
+      failures.push(FAILURE_CODE.TURN_MARKERS_MISSING);
+      actions.add('markers');
+    }
+
+    if (
+      desired.markers &&
+      settings.widenComposer &&
+      document.querySelector(SELECTOR.composerInput) &&
+      !actual.composerMarker
+    ) {
+      failures.push(FAILURE_CODE.COMPOSER_MARKER_MISSING);
+      actions.add('markers');
+    }
+
+    if (!actual.width.ok) {
+      failures.push(FAILURE_CODE.WIDTH_VERIFICATION_FAILED);
+      actions.add('markers');
+      actions.add('root');
+    }
+
+    if (
+      runtime.lastDomFingerprintChangeAt > 0 &&
+      Date.now() - runtime.lastDomFingerprintChangeAt <= CONFIG.fingerprintChangeCooldownMs
+    ) {
+      failures.push(FAILURE_CODE.DOM_FINGERPRINT_CHANGED);
+      actions.add('full-scan');
+    }
+
+    if (desired.enabled && strategy.lowConfidence) {
+      failures.push(FAILURE_CODE.STRATEGY_LOW_CONFIDENCE);
+      actions.add('root');
+      actions.add('styles');
+    }
+
+    const result = {
+      ok: failures.length === 0,
+      failures: normalizeFailureCodes(failures),
+      actions: [...actions],
+      strategy: {
+        id: strategy.id,
+        candidateId: strategy.candidateId,
+        confidence: strategy.confidence,
+        threshold: strategy.threshold,
+        lowConfidence: strategy.lowConfidence
+      }
+    };
+
+    runtime.lastStateDiff = result;
+    return result;
+  }
+
+  function getRepairLevelForFailures(failures = []) {
+    const set = new Set(normalizeFailureCodes(failures));
+
+    if (
+      set.has(FAILURE_CODE.OBSERVER_INTEGRITY) ||
+      set.has(FAILURE_CODE.DOM_FINGERPRINT_CHANGED)
+    ) return 4;
+    if (
+      set.has(FAILURE_CODE.WIDTH_VERIFICATION_FAILED) ||
+      set.has(FAILURE_CODE.WIDTH_EXCEEDS_PANE) ||
+      set.has(FAILURE_CODE.WIDTH_UNDER_APPLIED) ||
+      set.has(FAILURE_CODE.TURN_MARKERS_MISSING) ||
+      set.has(FAILURE_CODE.COMPOSER_MARKER_MISSING) ||
+      set.has(FAILURE_CODE.DISCONNECTED_MARKERS)
+    ) return 3;
+    if (
+      set.has(FAILURE_CODE.MAIN_STYLE_INTEGRITY) ||
+      set.has(FAILURE_CODE.MAIN_STYLE_MISSING) ||
+      set.has(FAILURE_CODE.UI_STYLE_INTEGRITY)
+    ) return 2;
+    if (set.has(FAILURE_CODE.ROOT_STATE_INTEGRITY)) return 1;
+    if (set.has(FAILURE_CODE.RECONCILIATION_DID_NOT_CONVERGE)) return 5;
+    return Math.min(5, Math.max(1, runtime.enforcementRetryCount + 1));
+  }
+
+  function buildRepairPlan(diff, reason = 'repair', persist = true) {
+    const failures = normalizeFailureCodes(diff?.failures || []);
+    const requestedActions = new Set(diff?.actions || []);
+    const lowConfidence = failures.includes(FAILURE_CODE.STRATEGY_LOW_CONFIDENCE);
+    let level = getRepairLevelForFailures(failures);
+
+    if (runtime.convergenceStallCount >= CONFIG.convergenceStallLimit) {
+      failures.push(FAILURE_CODE.RECONCILIATION_STALLED);
+      level = Math.max(level, 4);
+    }
+
+    if (runtime.convergenceStallCount >= CONFIG.convergenceHardLimit) {
+      failures.push(FAILURE_CODE.RECONCILIATION_DID_NOT_CONVERGE);
+      level = 5;
+    }
+
+    const conservative = Boolean(lowConfidence);
+    if (conservative) {
+      requestedActions.delete('markers');
+      requestedActions.delete('full-scan');
+      requestedActions.add('styles');
+      requestedActions.add('root');
+      level = Math.min(level, 2);
+    }
+
+    if (level >= 2) requestedActions.add('styles');
+    if (level >= 1) requestedActions.add('root');
+    if (level >= 4) requestedActions.add('observers');
+    if (level >= 3 && !conservative) requestedActions.add('full-scan');
+
+    const plan = {
+      id: ++runtime.repairPlanCounter,
+      createdAt: Date.now(),
+      reason: String(reason || 'repair'),
+      level: Math.max(1, Math.min(5, level)),
+      failures: normalizeFailureCodes(failures),
+      actions: [...requestedActions],
+      conservative
+    };
+
+    if (persist) {
+      runtime.lastRepairPlan = plan;
+    }
+    return plan;
+  }
+
+  function executeRepairPlan(plan) {
+    if (!plan || !Array.isArray(plan.actions)) {
+      return { ok: false, changed: false, reason: 'invalid-plan' };
+    }
+
+    const startedAt = nowMs();
+    const actions = new Set(plan.actions);
+    let changed = false;
+
+    runtime.enforcementLevel = Math.max(
+      runtime.enforcementLevel,
+      Number(plan.level || 1)
+    );
+
+    try {
+      if (actions.has('styles')) {
+        changed = ensureStyle(ID.uiStyle, getUiCss()) || changed;
+        if (settings.enabled) {
+          changed = ensureStyle(ID.style, getMainCss()) || changed;
+        } else {
+          changed = removeMainStyle() || changed;
+        }
+      }
+
+      if (actions.has('root')) {
+        const before = rootStateMatches();
+        settings.enabled ? setRootState() : clearRootState();
+        changed = !before || changed;
+      }
+
+      if (actions.has('observers')) {
+        const before = Boolean(
+          runtime.rootObserver && runtime.bodyObserver && runtime.headObserver
+        );
+        attachObservers();
+        attachPaneResizeObserver();
+        const after = Boolean(
+          runtime.rootObserver && runtime.bodyObserver && runtime.headObserver
+        );
+        changed = before !== after || changed;
+      }
+
+      if (actions.has('markers') || actions.has('full-scan')) {
+        requestRepair(
+          `${plan.reason}-plan-${plan.id}`,
+          ALL_DIRTY_REGIONS,
+          true
+        );
+        changed = true;
+      }
+
+      const result = {
+        ok: true,
+        changed,
+        pending:
+          actions.has('markers') ||
+          actions.has('full-scan'),
+        planId: plan.id,
+        durationMs: Math.max(0, nowMs() - startedAt)
+      };
+      runtime.lastRepairPlanResult = result;
+      recordRepairHistory({
+        reason: plan.reason,
+        level: plan.level,
+        result: changed ? 'applied' : 'idempotent',
+        failures: plan.failures,
+        durationMs: result.durationMs,
+        planId: plan.id,
+        actions: plan.actions,
+        conservative: plan.conservative,
+        convergence: runtime.lastConvergence
+      });
+      return result;
+    } catch (error) {
+      runtime.lastError = String(error?.message || error);
+      const result = {
+        ok: false,
+        changed,
+        pending: false,
+        planId: plan.id,
+        error: runtime.lastError,
+        durationMs: Math.max(0, nowMs() - startedAt)
+      };
+      runtime.lastRepairPlanResult = result;
+      recordRepairHistory({
+        reason: plan.reason,
+        level: plan.level,
+        result: 'error',
+        failures: plan.failures,
+        durationMs: result.durationMs,
+        planId: plan.id,
+        actions: plan.actions,
+        conservative: plan.conservative,
+        convergence: runtime.lastConvergence
+      });
+      return result;
+    }
+  }
+
+  function getDiffSignature(diff) {
+    return JSON.stringify({
+      failures: normalizeFailureCodes(diff?.failures || []).sort(),
+      actions: [...(diff?.actions || [])].sort()
+    });
+  }
+
+  function trackConvergence(diff, changed = false) {
+    const failures = normalizeFailureCodes(diff?.failures || []);
+    const signature = getDiffSignature(diff);
+    const previousSignature = runtime.convergenceSignature;
+    const previousCount = runtime.convergencePreviousFailureCount;
+    let status = 'progress';
+
+    if (diff?.ok) {
+      runtime.convergenceStallCount = 0;
+      runtime.convergencePassCount += 1;
+      if (!changed) runtime.idempotentPassCount += 1;
+      status = changed ? 'converged' : 'idempotent';
+    } else if (previousSignature && signature === previousSignature) {
+      runtime.convergenceStallCount += 1;
+      status = 'stalled';
+    } else if (previousCount > 0 && failures.length < previousCount) {
+      runtime.convergenceStallCount = 0;
+      status = 'progress';
+    } else {
+      runtime.convergenceStallCount = 0;
+      status = 'changed';
+    }
+
+    if (runtime.convergenceStallCount >= CONFIG.convergenceHardLimit) {
+      runtime.convergenceFailureCount += 1;
+      status = 'failed';
+    }
+
+    runtime.convergenceSignature = signature;
+    runtime.convergencePreviousFailureCount = failures.length;
+    runtime.lastConvergence = {
+      at: Date.now(),
+      status,
+      stalledPasses: runtime.convergenceStallCount,
+      failures,
+      signature
+    };
+
+    return runtime.lastConvergence;
+  }
+
+  function applyReconciliation(diff, reason = 'reconcile') {
+    if (!diff || diff.ok) {
+      trackConvergence(diff || { ok: true, failures: [], actions: [] }, false);
+      return false;
+    }
+
+    const plan = buildRepairPlan(diff, reason);
+    return executeRepairPlan(plan).changed;
+  }
+
+  function performReconciliation(reason = 'reconcile') {
+    const desired = deriveDesiredState();
+    const initialActual = inspectActualState();
+    const initialDiff =
+      compareDesiredState(
+        desired,
+        initialActual
+      );
+
+    if (initialDiff.ok) {
+      runtime.reconcilePendingVerification = false;
+      runtime.reconcilePendingSince = 0;
+
+      const convergence =
+        trackConvergence(
+          initialDiff,
+          false
+        );
+
+      return {
+        ok: true,
+        pending: false,
+        desired,
+        initialActual,
+        actual: initialActual,
+        initialDiff,
+        diff: initialDiff,
+        plan: null,
+        execution: null,
+        convergence,
+        changed: false,
+        idempotent: true
+      };
+    }
+
+    const plan =
+      buildRepairPlan(
+        initialDiff,
+        reason
+      );
+
+    const execution =
+      executeRepairPlan(plan);
+
+    if (!execution.ok) {
+      return {
+        ok: false,
+        pending: false,
+        desired,
+        initialActual,
+        actual: initialActual,
+        initialDiff,
+        diff: initialDiff,
+        plan,
+        execution,
+        convergence:
+          runtime.lastConvergence,
+        changed:
+          Boolean(execution.changed),
+        idempotent: false
+      };
+    }
+
+    if (execution.pending) {
+      runtime.reconcilePendingVerification = true;
+      runtime.reconcilePendingSince = Date.now();
+
+      const convergence = {
+        at: Date.now(),
+        status: 'pending',
+        stalledPasses:
+          runtime.convergenceStallCount,
+        failures:
+          normalizeFailureCodes(
+            initialDiff.failures
+          ),
+        signature:
+          getDiffSignature(initialDiff)
+      };
+
+      runtime.lastConvergence =
+        convergence;
+
+      return {
+        ok: false,
+        pending: true,
+        desired,
+        initialActual,
+        actual: initialActual,
+        initialDiff,
+        diff: initialDiff,
+        plan,
+        execution,
+        convergence,
+        changed:
+          Boolean(execution.changed),
+        idempotent: false
+      };
+    }
+
+    runtime.reconcilePendingVerification = false;
+    runtime.reconcilePendingSince = 0;
+
+    const actual =
+      inspectActualState();
+
+    const diff =
+      compareDesiredState(
+        desired,
+        actual
+      );
+
+    const convergence =
+      trackConvergence(
+        diff,
+        execution.changed
+      );
+
+    return {
+      ok: diff.ok,
+      pending: false,
+      desired,
+      initialActual,
+      actual,
+      initialDiff,
+      diff,
+      plan,
+      execution,
+      convergence,
+      changed:
+        Boolean(execution.changed),
+      idempotent:
+        diff.ok &&
+        !execution.changed
+    };
+  }
+
+  function scheduleQueuedReconciliation() {
+    if (
+      !runtime.started ||
+      runtime.queuedReconciliationFrame ||
+      runtime.queuedReconciliationReasons.size === 0
+    ) {
+      return false;
+    }
+
+    const epoch =
+      currentRuntimeEpoch();
+
+    runtime.queuedReconciliationFrame =
+      requestNextFrame(() => {
+        runtime.queuedReconciliationFrame = 0;
+
+        if (
+          rejectStaleCallback(
+            epoch,
+            'queued-reconciliation'
+          )
+        ) {
+          return;
+        }
+
+        const reasons = [
+          ...runtime.queuedReconciliationReasons
+        ];
+
+        runtime.queuedReconciliationReasons.clear();
+        runtime.queuedReconciliationRunCount += 1;
+
+        reconcileDesiredState(
+          `queued:${reasons.join(',')}`
+        );
+      });
+
+    return true;
+  }
+
+  function reconcileDesiredState(reason = 'reconcile') {
+    if (
+      runtime.reconcileInProgress ||
+      runtime.reconcilePendingVerification
+    ) {
+      runtime.reconcileLockContentionCount += 1;
+      runtime.queuedReconciliationRequestCount += 1;
+      runtime.queuedReconciliationReasons.add(
+        String(reason || 'reconcile')
+      );
+
+      return {
+        ok: false,
+        pending: true,
+        queued: true,
+        changed: false,
+        idempotent: false,
+        reason:
+          String(reason || 'reconcile'),
+        diff: {
+          ok: false,
+          failures: [],
+          actions: []
+        },
+        convergence:
+          runtime.lastConvergence
+      };
+    }
+
+    const startedAt = nowMs();
+    runtime.reconcileInProgress = true;
+
+    try {
+      const result =
+        performReconciliation(reason);
+
+      return {
+        ...result,
+        queued: false
+      };
+    } finally {
+      runtime.reconcileInProgress = false;
+
+      recordPerformanceSample(
+        'reconcile',
+        Math.max(
+          0,
+          nowMs() - startedAt
+        )
+      );
+
+      scheduleQueuedReconciliation();
+    }
+  }
+
+  function executeRepairLevel(level, reason, failures = []) {
+    const normalized = normalizeFailureCodes(failures);
+    const diff = {
+      ok: false,
+      failures: normalized,
+      actions: []
+    };
+    const plan = buildRepairPlan(diff, reason);
+    plan.level = Math.max(1, Math.min(5, Number(level) || 1));
+    if (plan.level >= 1) plan.actions = [...new Set([...plan.actions, 'root'])];
+    if (plan.level >= 2) plan.actions = [...new Set([...plan.actions, 'styles'])];
+    if (plan.level >= 3 && !plan.conservative) plan.actions = [...new Set([...plan.actions, 'full-scan'])];
+    if (plan.level >= 4) plan.actions = [...new Set([...plan.actions, 'observers'])];
+    return executeRepairPlan(plan).ok;
+  }
+
+  function getHealthBreakdown() {
+    const verification =
+      verifyRuntime();
+
+    const width =
+      runtime.lastWidthVerification ||
+      verifyAppliedWidths();
+
+    const compatibility =
+      runtime.lastCompatibility ||
+      evaluateCompatibility();
+
+    const selectors =
+      getSelectorHealthSummary();
+
+    const performance =
+      getPerformanceBudgetReport();
+
+    const runtimeChecks = [
+      verification.checks.started,
+      verification.checks.rootObserver,
+      verification.checks.bodyObserver,
+      verification.checks.headObserver,
+      verification.checks.enforcementTimer,
+      verification.checks.schedulerState
+    ];
+
+    const runtimeScore = Math.round(
+      100 *
+      runtimeChecks.filter(Boolean).length /
+      runtimeChecks.length
+    );
+
+    const styleChecks = [
+      verification.checks.mainStyle,
+      verification.checks.uiStyle,
+      verification.checks.rootState,
+      verification.checks.rootEnabledState
+    ];
+
+    const stylesScore = Math.round(
+      100 *
+      styleChecks.filter(Boolean).length /
+      styleChecks.length
+    );
+
+    const domScore = Math.round(
+      Math.max(
+        0,
+        Math.min(
+          100,
+          (
+            Number(
+              compatibility.score || 0
+            ) +
+            selectors.score
+          ) / 2
+        )
+      )
+    );
+
+    const widthScore =
+      width.ok
+        ? 100
+        : Math.max(
+            0,
+            Math.round(
+              100 -
+              Math.min(
+                100,
+                Number(
+                  width.maxDeviationPx ||
+                  width.deviationPx ||
+                  50
+                ) * 2
+              )
+            )
+          );
+
+    let reconciliationScore = 100;
+
+    reconciliationScore -=
+      Math.min(
+        45,
+        runtime.convergenceStallCount *
+          12
+      );
+
+    if (runtime.safeFallbackActive) {
+      reconciliationScore -= 25;
+    }
+
+    if (
+      runtime.strategySelection?.lowConfidence
+    ) {
+      reconciliationScore -= 15;
+    }
+
+    if (runtime.reconcileInProgress) {
+      reconciliationScore -= 3;
+    }
+
+    reconciliationScore =
+      Math.max(
+        0,
+        reconciliationScore
+      );
+
+    const performanceScore =
+      performance.score;
+
+    const breakdown = {
+      runtime: runtimeScore,
+      styles: stylesScore,
+      dom: domScore,
+      width: widthScore,
+      reconciliation:
+        reconciliationScore,
+      performance:
+        performanceScore
+    };
+
+    const score = Math.round(
+      runtimeScore * 0.20 +
+      stylesScore * 0.15 +
+      domScore * 0.20 +
+      widthScore * 0.20 +
+      reconciliationScore * 0.15 +
+      performanceScore * 0.10
+    );
+
+    return {
+      score:
+        Math.max(
+          0,
+          Math.min(100, score)
+        ),
+      status:
+        score >= 90
+          ? 'healthy'
+          : score >= 70
+            ? 'degraded'
+            : 'unhealthy',
+      breakdown,
+      selectors,
+      performance
+    };
+  }
+
+  function calculateHealthScore() {
+    const result =
+      getHealthBreakdown();
+
+    runtime.healthScore =
+      result.score;
+    runtime.healthStatus =
+      result.status;
+    runtime.healthBreakdown =
+      result.breakdown;
+
+    return result;
+  }
+
+  function inspectLifecycleState(expectedRunning) {
+    const root = getRoot();
+    const styleCount = document.querySelectorAll(`#${ID.style}`).length;
+    const uiStyleCount = document.querySelectorAll(`#${ID.uiStyle}`).length;
+    const rootAttributesPresent = [
+      ATTR.version,
+      ATTR.cap,
+      ATTR.enabled,
+      ATTR.wide,
+      ATTR.left,
+      ATTR.canvas
+    ].some((attribute) => root?.hasAttribute(attribute));
+
+    const checks = expectedRunning
+      ? {
+          started: runtime.started,
+          singleMainStyle: !settings.enabled || styleCount === 1,
+          singleUiStyle: uiStyleCount === 1,
+          observers: Boolean(
+            runtime.rootObserver && runtime.bodyObserver && runtime.headObserver
+          ),
+          repairTimer: Boolean(runtime.repairTimer),
+          routeTimer: Boolean(runtime.routeTimer),
+          enforcementTimer: Boolean(runtime.enforcementTimer)
+        }
+      : {
+          stopped: !runtime.started,
+          noMainStyle: styleCount === 0,
+          noUiStyle: uiStyleCount === 0,
+          noObservers: !runtime.rootObserver && !runtime.bodyObserver && !runtime.headObserver && !runtime.paneResizeObserver,
+          noTimers: !runtime.repairTimer && !runtime.routeTimer && !runtime.enforcementTimer && !runtime.scanTimer && !runtime.routeDelayTimer,
+          rootClean: !rootAttributesPresent,
+          markersClean: !MANAGED_MARKERS.some(hasConnectedMarker)
+        };
+
+    return {
+      ok: Object.values(checks).every(Boolean),
+      checks
+    };
+  }
+
+  function lifecycleTick() {
+    return new Promise((resolve) => window.setTimeout(resolve, 0));
+  }
+
+  async function lifecycleTortureSelfTest(options = {}) {
+    if (runtime.lifecycleTestRunning) {
+      return {
+        ok: false,
+        running: true,
+        error: 'Lifecycle torture self-test already running'
+      };
+    }
+
+    runtime.lifecycleTestRunning = true;
+    runtime.lifecycleTestCount += 1;
+    const startedAt = nowMs();
+    const originalStarted = runtime.started;
+    const originalRepairHistory = [...runtime.repairHistory];
+    const originalRepairPlan = runtime.lastRepairPlan;
+    const originalRepairPlanResult = runtime.lastRepairPlanResult;
+    const originalRepairPlanCounter = runtime.repairPlanCounter;
+    const originalConvergence = {
+      signature: runtime.convergenceSignature,
+      previousFailureCount: runtime.convergencePreviousFailureCount,
+      stallCount: runtime.convergenceStallCount,
+      failureCount: runtime.convergenceFailureCount,
+      passCount: runtime.convergencePassCount,
+      idempotentPassCount: runtime.idempotentPassCount,
+      last: runtime.lastConvergence
+    };
+    const cycles = Math.max(
+      1,
+      Math.min(5, Number(options.cycles || CONFIG.lifecycleTortureCycles) || CONFIG.lifecycleTortureCycles)
+    );
+    const results = [];
+
+    try {
+      for (let cycle = 1; cycle <= cycles; cycle += 1) {
+        if (runtime.started) stop();
+        await lifecycleTick();
+        const stopped = inspectLifecycleState(false);
+
+        start();
+        await lifecycleTick();
+        const running = inspectLifecycleState(true);
+
+        results.push({
+          cycle,
+          stopped,
+          running,
+          ok: stopped.ok && running.ok
+        });
+      }
+
+      if (!originalStarted && runtime.started) {
+        stop();
+        await lifecycleTick();
+      }
+
+      const result = {
+        ok: results.every((item) => item.ok),
+        cycles,
+        durationMs: Math.max(0, nowMs() - startedAt),
+        results,
+        restoredStartedState: runtime.started === originalStarted
+      };
+      result.ok = result.ok && result.restoredStartedState;
+      runtime.lastLifecycleTest = result;
+      return result;
+    } catch (error) {
+      runtime.lastError = String(error?.message || error);
+      const result = {
+        ok: false,
+        cycles,
+        durationMs: Math.max(0, nowMs() - startedAt),
+        results,
+        error: runtime.lastError
+      };
+      runtime.lastLifecycleTest = result;
+      return result;
+    } finally {
+      if (originalStarted && !runtime.started) {
+        start();
+      } else if (!originalStarted && runtime.started) {
+        stop();
+      }
+
+      runtime.repairHistory = originalRepairHistory;
+      runtime.lastRepairPlan = originalRepairPlan;
+      runtime.lastRepairPlanResult = originalRepairPlanResult;
+      runtime.repairPlanCounter = originalRepairPlanCounter;
+      runtime.convergenceSignature = originalConvergence.signature;
+      runtime.convergencePreviousFailureCount = originalConvergence.previousFailureCount;
+      runtime.convergenceStallCount = originalConvergence.stallCount;
+      runtime.convergenceFailureCount = originalConvergence.failureCount;
+      runtime.convergencePassCount = originalConvergence.passCount;
+      runtime.idempotentPassCount = originalConvergence.idempotentPassCount;
+      runtime.lastConvergence = originalConvergence.last;
+      runtime.lifecycleTestRunning = false;
+    }
+  }
+
+  function selfTest() {
+    const startedAt = nowMs();
+    const fingerprint =
+      updateDomFingerprint(
+        'self-test'
+      );
+    const desired =
+      deriveDesiredState();
+    const actual =
+      inspectActualState();
+    const diff =
+      compareDesiredState(
+        desired,
+        actual
+      );
+    const invariants =
+      evaluateLayoutInvariants();
+    const verification =
+      verifyRuntime();
+    const width =
+      verifyAppliedWidths();
+    const health =
+      calculateHealthScore();
+    const strategy =
+      runtime.strategySelection ||
+      selectDomStrategy(
+        runtime.lastCapabilities ||
+        detectDomCapabilities()
+      );
+
+    const durationMs =
+      Math.max(
+        0,
+        nowMs() - startedAt
+      );
+
+    recordPerformanceSample(
+      'selfTest',
+      durationMs
+    );
+
+    return {
+      ok:
+        verification.ok &&
+        invariants.ok &&
+        width.ok &&
+        diff.ok &&
+        !strategy.lowConfidence,
+      durationMs,
+      version: VERSION,
+      health,
+      strategy,
+      fingerprint,
+      desired,
+      actual,
+      diff,
+      repairPlan:
+        diff.ok
+          ? null
+          : buildRepairPlan(
+              diff,
+              'self-test-preview',
+              false
+            ),
+      convergence:
+        runtime.lastConvergence,
+      mutationAttribution:
+        runtime.lastMutationAttribution,
+      selectorHealth:
+        getSelectorHealthSummary(),
+      repairEffectiveness:
+        getRepairEffectivenessMetrics(),
+      performanceBudget:
+        getPerformanceBudgetReport(),
+      runtimeEpoch:
+        runtime.epoch,
+      staleCallbacksBlocked:
+        runtime.staleCallbackCount,
+      lifecycleTortureAvailable: true,
+      regressionTestAvailable: true,
+      invariants,
+      verification,
+      width
+    };
+  }
+
+  function regressionTest() {
+    const startedAt = nowMs();
+    const results = [];
+
+    const test = (name, run) => {
+      try {
+        const detail = run();
+
+        const ok =
+          detail === true ||
+          Boolean(
+            detail &&
+            detail.ok !== false
+          );
+
+        results.push({
+          name,
+          ok,
+          detail:
+            detail === true
+              ? null
+              : detail
+        });
+      } catch (error) {
+        results.push({
+          name,
+          ok: false,
+          error:
+            String(
+              error?.message ||
+              error
+            )
+        });
+      }
+    };
+
+    test(
+      'settings-normalization',
+      () => {
+        const normalized =
+          normalizeSettings({
+            gutterMin: -100,
+            gutterMax: 9999,
+            autoMinWidth: 1
+          });
+
+        return {
+          ok:
+            normalized.gutterMin ===
+              LIMITS.gutterMin[0] &&
+            normalized.gutterMax ===
+              LIMITS.gutterMax[1] &&
+            normalized.autoMinWidth ===
+              LIMITS.autoMinWidth[0]
+        };
+      }
+    );
+
+    test(
+      'failure-code-normalization',
+      () => ({
+        ok:
+          normalizeFailureCode(
+            'main-style-missing'
+          ) ===
+          FAILURE_CODE.MAIN_STYLE_MISSING
+      })
+    );
+
+    test(
+      'strategy-scoring',
+      () => {
+        const strategy =
+          STRATEGY_REGISTRY.find(
+            (item) =>
+              item.id ===
+              'virtualized-thread'
+          );
+
+        const score =
+          strategy.score({
+            transcriptRoot: true,
+            virtualizedTurns: true,
+            conversationTarget: true,
+            threadBottomContainer: true,
+            promptTextarea: true
+          });
+
+        return {
+          ok: score === 100,
+          score
+        };
+      }
+    );
+
+    test(
+      'repair-level-selection',
+      () => ({
+        ok:
+          getRepairLevelForFailures([
+            FAILURE_CODE.MAIN_STYLE_MISSING
+          ]) === 2 &&
+          getRepairLevelForFailures([
+            FAILURE_CODE.OBSERVER_INTEGRITY
+          ]) === 4
+      })
+    );
+
+    test(
+      'selector-registry-contract',
+      () => ({
+        ok:
+          SELECTOR_HEALTH_TARGETS.length >= 8 &&
+          SELECTOR_HEALTH_TARGETS.every(
+            (item) =>
+              item.id &&
+              item.selector &&
+              item.group
+          )
+      })
+    );
+
+    test(
+      'performance-budget-contract',
+      () => ({
+        ok:
+          Object.keys(
+            PERFORMANCE_BUDGET
+          ).sort().join('|') ===
+          [
+            'fullScan',
+            'reconcile',
+            'selfTest',
+            'watchdog'
+          ].sort().join('|')
+      })
+    );
+
+    test(
+      'epoch-contract',
+      () => ({
+        ok:
+          Number.isInteger(
+            runtime.epoch
+          ) &&
+          runtime.epoch >= 0 &&
+          (
+            !runtime.started ||
+            isCurrentRuntimeEpoch(
+              runtime.epoch
+            )
+          )
+      })
+    );
+
+    test(
+      'reconciliation-lock-contract',
+      () => ({
+        ok:
+          runtime.queuedReconciliationReasons
+            instanceof Set &&
+          typeof runtime.reconcileInProgress ===
+            'boolean'
+      })
+    );
+
+    test(
+      'health-breakdown-contract',
+      () => {
+        const health =
+          getHealthBreakdown();
+
+        return {
+          ok:
+            health.score >= 0 &&
+            health.score <= 100 &&
+            [
+              'runtime',
+              'styles',
+              'dom',
+              'width',
+              'reconciliation',
+              'performance'
+            ].every(
+              (key) =>
+                Number.isFinite(
+                  health.breakdown[key]
+                )
+            ),
+          score: health.score
+        };
+      }
+    );
+
+    test(
+      'canonical-product-name',
+      () => ({
+        ok:
+          PRODUCT_NAME ===
+          'UltraWide ChatGPT'
+      })
+    );
+
+    test(
+      'pending-reconciliation-contract',
+      () => ({
+        ok:
+          typeof runtime.reconcilePendingVerification ===
+            'boolean' &&
+          Number.isFinite(
+            runtime.reconcilePendingSince
+          )
+      })
+    );
+
+    test(
+      'repair-metrics-contract',
+      () => {
+        const metrics =
+          getRepairEffectivenessMetrics();
+
+        return {
+          ok:
+            Number.isFinite(
+              metrics.successRate
+            ) &&
+            Number.isFinite(
+              metrics.averageDurationMs
+            )
+        };
+      }
+    );
+
+    const durationMs =
+      Math.max(
+        0,
+        nowMs() - startedAt
+      );
+
+    return {
+      ok:
+        results.every(
+          (item) => item.ok
+        ),
+      version: VERSION,
+      durationMs,
+      passed:
+        results.filter(
+          (item) => item.ok
+        ).length,
+      failed:
+        results.filter(
+          (item) => !item.ok
+        ).length,
+      results
+    };
+  }
+
   function evaluateLayoutInvariants() {
     const root = getRoot();
     const pane = resolveActivePane();
     const failures = [];
 
     if (!runtime.started) {
-      failures.push('runtime-not-started');
+      failures.push(FAILURE_CODE.RUNTIME_NOT_STARTED);
     }
 
     if (settings.enabled) {
-      if (!document.getElementById(ID.style)) {
-        failures.push('main-style-missing');
+      const mainStyle =
+        document.getElementById(ID.style);
+
+      if (!mainStyle) {
+        failures.push(FAILURE_CODE.MAIN_STYLE_MISSING);
+      } else if (
+        mainStyle.textContent !== getMainCss()
+      ) {
+        failures.push(FAILURE_CODE.MAIN_STYLE_INTEGRITY);
       }
 
       if (root?.getAttribute(ATTR.enabled) !== '1') {
-        failures.push('root-enabled-state');
+        failures.push(FAILURE_CODE.ROOT_ENABLED_STATE);
+      }
+
+      if (!rootStateMatches()) {
+        failures.push(FAILURE_CODE.ROOT_STATE_INTEGRITY);
       }
     }
 
     if (hasDisconnectedMarkers()) {
-      failures.push('disconnected-markers');
+      failures.push(FAILURE_CODE.DISCONNECTED_MARKERS);
     }
 
     if (
       runtime.lastTurnCount > 0 &&
       !hasConnectedMarker(ATTR.turn)
     ) {
-      failures.push('turn-markers-missing');
+      failures.push(FAILURE_CODE.TURN_MARKERS_MISSING);
     }
 
     if (
@@ -3080,7 +5713,7 @@ ${safeMediaCss}
       document.querySelector(SELECTOR.composerInput) &&
       !hasConnectedMarker(ATTR.composer)
     ) {
-      failures.push('composer-marker-missing');
+      failures.push(FAILURE_CODE.COMPOSER_MARKER_MISSING);
     }
 
     if (
@@ -3113,9 +5746,42 @@ ${safeMediaCss}
           rect &&
           rect.width > maxAllowedWidth
         ) {
-          failures.push('managed-width-exceeds-pane');
+          failures.push(FAILURE_CODE.WIDTH_EXCEEDS_PANE);
           break;
         }
+      }
+
+      const expectedContentWidth =
+        getExpectedContentWidthPx(
+          paneRect?.width || 0
+        );
+
+      let widthAnchor = null;
+
+      try {
+        widthAnchor =
+          Array.from(
+            document.querySelectorAll(
+              [
+                '[data-thread-user-message-navigation-content]',
+                '[data-thread-find-target="conversation"]'
+              ].join(',')
+            )
+          ).find(isVisibleElement) || null;
+      } catch (_) {}
+
+      const anchorRect =
+        getVisibleRect(widthAnchor);
+
+      if (
+        expectedContentWidth >= 640 &&
+        anchorRect &&
+        anchorRect.width <
+          expectedContentWidth * 0.72
+      ) {
+        failures.push(
+          FAILURE_CODE.WIDTH_UNDER_APPLIED
+        );
       }
     }
 
@@ -3172,23 +5838,150 @@ ${safeMediaCss}
   function processInvariantResult(result) {
     if (result.ok) {
       runtime.invariantFailureStreak = 0;
+      runtime.enforcementRetryCount = 0;
+      runtime.enforcementLevel = 0;
+      runtime.lastEnforcementFailures = [];
       return;
     }
 
     runtime.invariantFailureStreak += 1;
+    runtime.lastEnforcementFailures = normalizeFailureCodes(result.failures);
+
     pushDebugEvent('invariant-failure', {
       streak: runtime.invariantFailureStreak,
       failures: result.failures
     });
 
-    if (
-      runtime.invariantFailureStreak >=
-        CONFIG.invariantFailureThreshold
-    ) {
-      activateSafeFallback(
-        result.failures.join(',')
+    const canRetry =
+      runtime.started &&
+      settings.enabled &&
+      !shouldPauseWork() &&
+      runtime.enforcementRetryCount < CONFIG.enforcementRetryLimit;
+
+    if (canRetry) {
+      runtime.enforcementRetryCount += 1;
+      runtime.enforcementRepairCount += 1;
+      runtime.lastEnforcementRepairAt = Date.now();
+
+      const baseLevel = getRepairLevelForFailures(result.failures);
+      const level = Math.min(
+        5,
+        Math.max(baseLevel, runtime.enforcementRetryCount)
       );
+
+      pushDebugEvent('invariant-auto-repair', {
+        attempt: runtime.enforcementRetryCount,
+        level,
+        failures: result.failures
+      });
+
+      executeRepairLevel(
+        level,
+        'invariant-auto-repair',
+        result.failures
+      );
+      return;
     }
+
+    const geometryUnsafe = normalizeFailureCodes(result.failures).includes(FAILURE_CODE.WIDTH_EXCEEDS_PANE);
+
+    if (
+      geometryUnsafe &&
+      runtime.invariantFailureStreak >= CONFIG.invariantFailureThreshold
+    ) {
+      activateSafeFallback(result.failures.join(','));
+    }
+  }
+
+  function enforceRuntimeIntegrity(reason = 'watchdog') {
+    if (!runtime.started || shouldPauseWork()) {
+      return false;
+    }
+
+    runtime.enforcementCheckCount += 1;
+    runtime.lastEnforcementAt = Date.now();
+
+    attachObservers();
+    attachPaneResizeObserver();
+    detectCanvas();
+    updateDomFingerprint(reason);
+
+    if (!settings.enabled) {
+      let repaired = false;
+      if (document.getElementById(ID.style)) {
+        repaired = removeMainStyle() || repaired;
+      }
+      if (MANAGED_MARKERS.some(hasConnectedMarker)) {
+        clearManagedMarkers();
+        repaired = true;
+      }
+      repaired = clearRootState() || repaired;
+      runtime.invariantFailureStreak = 0;
+      runtime.enforcementRetryCount = 0;
+      runtime.enforcementLevel = 0;
+      runtime.lastEnforcementFailures = [];
+      trackConvergence({ ok: true, failures: [], actions: [] }, repaired);
+      calculateHealthScore();
+      return repaired;
+    }
+
+    const reconciliation = reconcileDesiredState(reason);
+
+    if (!reconciliation.diff.ok) {
+      runtime.enforcementRepairCount += reconciliation.changed ? 1 : 0;
+      if (reconciliation.changed) {
+        runtime.lastEnforcementRepairAt = Date.now();
+      }
+      runtime.lastEnforcementFailures = normalizeFailureCodes(
+        reconciliation.diff.failures
+      );
+      calculateHealthScore();
+      return Boolean(reconciliation.changed);
+    }
+
+    const invariants = evaluateLayoutInvariants();
+
+    if (
+      !invariants.ok &&
+      runtime.enforcementRetryCount >= CONFIG.enforcementRetryLimit &&
+      Date.now() - runtime.lastEnforcementRepairAt >= CONFIG.enforcementRetryCooldownMs
+    ) {
+      runtime.enforcementRetryCount = 0;
+    }
+
+    if (!invariants.ok) {
+      processInvariantResult(invariants);
+      calculateHealthScore();
+      return true;
+    }
+
+    if (
+      runtime.safeFallbackActive &&
+      Date.now() - runtime.lastEnforcementRepairAt >= CONFIG.enforcementRetryCooldownMs
+    ) {
+      clearSafeFallback('automatic-recovery-attempt');
+      runtime.enforcementRetryCount = 0;
+      const recoveryDiff = {
+        ok: false,
+        failures: [FAILURE_CODE.WIDTH_VERIFICATION_FAILED],
+        actions: ['root', 'full-scan']
+      };
+      const recoveryPlan = buildRepairPlan(
+        recoveryDiff,
+        'safe-fallback-recovery'
+      );
+      executeRepairPlan(recoveryPlan);
+      runtime.enforcementRepairCount += 1;
+      runtime.lastEnforcementRepairAt = Date.now();
+      calculateHealthScore();
+      return true;
+    }
+
+    runtime.enforcementRetryCount = 0;
+    runtime.enforcementLevel = 0;
+    runtime.lastEnforcementFailures = [];
+    calculateHealthScore();
+    return false;
   }
 
   function performScan(
@@ -3197,6 +5990,14 @@ ${safeMediaCss}
   ) {
     if (shouldPauseWork()) {
       runtime.deferredScan = true;
+      return;
+    }
+
+    if (!settings.enabled) {
+      clearManagedMarkers();
+      clearRootState();
+      removeMainStyle();
+      runtime.deferredScan = false;
       return;
     }
 
@@ -3247,11 +6048,27 @@ ${safeMediaCss}
         runtime.lastCapabilities
       );
       setRootState();
+      updateDomFingerprint('scan');
+      verifyAppliedWidths();
       runtime.scanCount += 1;
 
-      processInvariantResult(
-        evaluateLayoutInvariants()
-      );
+      const scanInvariants =
+        evaluateLayoutInvariants();
+
+      if (runtime.reconcilePendingVerification) {
+        runtime.reconcilePendingVerification = false;
+        runtime.reconcilePendingSince = 0;
+        runtime.queuedReconciliationReasons.add(
+          'post-scan-verification'
+        );
+        scheduleQueuedReconciliation();
+      } else {
+        processInvariantResult(
+          scanInvariants
+        );
+      }
+
+      syncDebugOverlay();
     } catch (error) {
       runtime.lastError = String(
         error?.message || error
@@ -3266,12 +6083,17 @@ ${safeMediaCss}
         error
       );
     } finally {
-      if (settings.performanceTelemetry) {
-        const duration = Math.max(
-          0,
-          nowMs() - startedAt
-        );
+      const duration = Math.max(
+        0,
+        nowMs() - startedAt
+      );
 
+      recordPerformanceSample(
+        'fullScan',
+        duration
+      );
+
+      if (settings.performanceTelemetry) {
         runtime.lastScanDurationMs = duration;
         runtime.totalScanDurationMs += duration;
         runtime.maxScanDurationMs = Math.max(
@@ -3298,7 +6120,7 @@ ${safeMediaCss}
     }
 
     if (runtime.animationFrame) {
-      cancelAnimationFrame(runtime.animationFrame);
+      cancelNextFrame(runtime.animationFrame);
       runtime.animationFrame = 0;
     }
   }
@@ -3311,6 +6133,9 @@ ${safeMediaCss}
     if (!runtime.started && !force) {
       return false;
     }
+
+    const requestEpoch =
+      currentRuntimeEpoch();
 
     runtime.repairRequestCount += 1;
     runtime.pendingRepairReasons.add(
@@ -3357,6 +6182,15 @@ ${safeMediaCss}
       runtime.idleCallback = 0;
       runtime.animationFrame = 0;
 
+      if (
+        rejectStaleCallback(
+          requestEpoch,
+          'repair-scan'
+        )
+      ) {
+        return;
+      }
+
       const reasons = [
         ...runtime.pendingRepairReasons
       ];
@@ -3375,7 +6209,7 @@ ${safeMediaCss}
 
     if (force) {
       runtime.animationFrame =
-        requestAnimationFrame(run);
+        requestNextFrame(run);
       return true;
     }
 
@@ -3415,6 +6249,7 @@ ${safeMediaCss}
       removeMainStyle();
       clearRootState();
       clearManagedMarkers();
+      removeById(ID.debugOverlay);
       return;
     }
 
@@ -3425,6 +6260,7 @@ ${safeMediaCss}
 
     attachPaneResizeObserver();
     setRootState();
+    syncDebugOverlay();
     requestRepair(
       'apply-styles',
       ALL_DIRTY_REGIONS,
@@ -3489,8 +6325,99 @@ ${safeMediaCss}
     runtime.toastTimer =
       window.setTimeout(() => {
         runtime.toastTimer = 0;
-        removeById(ID.toast);
-      }, settings.toastMs);
+      removeById(ID.toast);
+    }, settings.toastMs);
+  }
+
+  function syncDebugOverlay() {
+    if (!settings.debugOverlay || !runtime.started) {
+      removeById(ID.debugOverlay);
+      return;
+    }
+
+    ensureStyle(
+      ID.uiStyle,
+      getUiCss()
+    );
+
+    const parent =
+      getBody() ||
+      getRoot();
+
+    if (!parent) {
+      return;
+    }
+
+    let overlay =
+      document.getElementById(
+        ID.debugOverlay
+      );
+
+    if (!overlay) {
+      overlay =
+        document.createElement('div');
+
+      overlay.id = ID.debugOverlay;
+
+      overlay.setAttribute(
+        'aria-hidden',
+        'true'
+      );
+
+      parent.appendChild(overlay);
+    }
+
+    const compatibility =
+      runtime.lastCompatibility ||
+      evaluateCompatibility();
+
+    const rows = [
+      `<strong>UltraWide ${VERSION}</strong>`,
+      `wide=${isWideActive() ? 'active' : 'inactive'} cap=${settings.cap}`,
+      `pane=${getAdaptiveWidth()}x${runtime.effectivePaneHeight || 0}`,
+      `turns=${runtime.lastTurnCount}/${runtime.lastRawTurnCount}`,
+      `composer=${hasConnectedMarker(ATTR.composer) ? 'yes' : 'no'} split=${runtime.canvasDetected ? 'yes' : 'no'}`,
+      `compat=${compatibility.status} strategy=${compatibility.strategy}`,
+      `safe=${runtime.safeFallbackActive ? runtime.safeFallbackReason || 'active' : 'off'}`
+    ];
+
+    overlay.innerHTML =
+      rows.join('<br>');
+  }
+
+  function downloadTextFile(filename, content, mimeType = 'text/plain') {
+    try {
+      const blob =
+        new Blob(
+          [String(content || '')],
+          { type: `${mimeType};charset=utf-8` }
+        );
+
+      const url =
+        URL.createObjectURL(blob);
+
+      const anchor =
+        document.createElement('a');
+
+      anchor.href = url;
+      anchor.download = filename;
+      anchor.style.display = 'none';
+
+      (getBody() || getRoot())?.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+
+      window.setTimeout(() => {
+        URL.revokeObjectURL(url);
+      }, 0);
+
+      return true;
+    } catch (error) {
+      runtime.lastError = String(
+        error?.message || error
+      );
+      return false;
+    }
   }
 
   function getStatusText() {
@@ -3526,6 +6453,118 @@ ${safeMediaCss}
     ].join(' | ');
   }
 
+  function getAdaptiveWatchdogInterval() {
+    if (shouldPauseWork()) {
+      return CONFIG.enforcementStableIntervalMs;
+    }
+
+    const now = Date.now();
+    const recentActivity = Math.max(
+      runtime.lastMutationAt || 0,
+      runtime.lastRouteChangeAt || 0,
+      runtime.lastPaneResizeAt || 0,
+      runtime.lastEnforcementRepairAt || 0
+    );
+
+    if (
+      runtime.invariantFailureStreak > 0 ||
+      runtime.enforcementRetryCount > 0 ||
+      runtime.safeFallbackActive
+    ) {
+      return CONFIG.enforcementUnstableIntervalMs;
+    }
+
+    if (now - recentActivity < 5000) {
+      return CONFIG.enforcementActiveIntervalMs;
+    }
+
+    if (runtime.stableWatchdogPasses >= 8) {
+      return CONFIG.enforcementStableIntervalMs;
+    }
+
+    return CONFIG.enforcementNormalIntervalMs;
+  }
+
+  function scheduleEnforcementWatchdog(delay = null) {
+    if (runtime.enforcementTimer) {
+      clearTimeout(runtime.enforcementTimer);
+      runtime.enforcementTimer = 0;
+    }
+
+    if (!runtime.started) {
+      return;
+    }
+
+    const interval = Number.isFinite(delay)
+      ? delay
+      : getAdaptiveWatchdogInterval();
+
+    const epoch =
+      currentRuntimeEpoch();
+
+    runtime.watchdogIntervalMs = interval;
+    runtime.enforcementTimer = window.setTimeout(() => {
+      runtime.enforcementTimer = 0;
+
+      if (
+        rejectStaleCallback(
+          epoch,
+          'enforcement-watchdog'
+        )
+      ) {
+        return;
+      }
+
+      const startedAt = nowMs();
+
+      try {
+        const repaired =
+          enforceRuntimeIntegrity(
+            'watchdog'
+          );
+
+        runtime.stableWatchdogPasses =
+          repaired
+            ? 0
+            : runtime.stableWatchdogPasses + 1;
+      } catch (error) {
+        runtime.stableWatchdogPasses = 0;
+        runtime.lastError =
+          String(
+            error?.message ||
+            error
+          );
+        pushDebugEvent(
+          'integrity-watchdog-error',
+          {
+            message:
+              runtime.lastError
+          }
+        );
+        console.error(
+          '[UltraWide] Integrity watchdog failed:',
+          error
+        );
+      } finally {
+        recordPerformanceSample(
+          'watchdog',
+          Math.max(
+            0,
+            nowMs() - startedAt
+          )
+        );
+
+        if (
+          isCurrentRuntimeEpoch(
+            epoch
+          )
+        ) {
+          scheduleEnforcementWatchdog();
+        }
+      }
+    }, Math.max(250, interval));
+  }
+
   function restartTimers() {
     if (!runtime.started) {
       return;
@@ -3543,8 +6582,26 @@ ${safeMediaCss}
       );
     }
 
+    if (runtime.enforcementTimer) {
+      clearTimeout(
+        runtime.enforcementTimer
+      );
+    }
+
+    const epoch =
+      currentRuntimeEpoch();
+
     runtime.repairTimer =
       window.setInterval(() => {
+        if (
+          rejectStaleCallback(
+            epoch,
+            'repair-interval'
+          )
+        ) {
+          return;
+        }
+
         if (shouldPauseWork()) {
           return;
         }
@@ -3567,10 +6624,21 @@ ${safeMediaCss}
 
     runtime.routeTimer =
       window.setInterval(() => {
+        if (
+          rejectStaleCallback(
+            epoch,
+            'route-interval'
+          )
+        ) {
+          return;
+        }
+
         if (!shouldPauseWork()) {
           checkRoute();
         }
       }, settings.routePollMs);
+
+    scheduleEnforcementWatchdog(CONFIG.enforcementActiveIntervalMs);
   }
 
   function commit(
@@ -3706,9 +6774,22 @@ ${safeMediaCss}
       );
     }
 
+    const epoch =
+      currentRuntimeEpoch();
+
     runtime.routeDelayTimer =
       window.setTimeout(() => {
         runtime.routeDelayTimer = 0;
+
+        if (
+          rejectStaleCallback(
+            epoch,
+            'route-check'
+          )
+        ) {
+          return;
+        }
+
         checkRoute();
       }, CONFIG.routeDelayMs);
   }
@@ -4004,22 +7085,90 @@ ${safeMediaCss}
     runtime.mutationBatchCount += 1;
     runtime.lastMutationAt = Date.now();
 
-    const dirty =
-      classifyMutationDirtyRegions(records);
+    if (!settings.enabled) {
+      return;
+    }
+
+    const attribution = attributeMutations(records || []);
+    if (attribution.source === 'ultrawide') {
+      pushDebugEvent('mutation-attributed', {
+        source: attribution.source,
+        internal: attribution.internal,
+        external: attribution.external
+      });
+      return;
+    }
+
+    const relevantRecords = attribution.externalRecords.length > 0
+      ? attribution.externalRecords
+      : records;
+    const dirty = classifyMutationDirtyRegions(relevantRecords);
 
     if (dirty.size > 0) {
       requestRepair(
-        'mutation',
+        attribution.source === 'mixed' ? 'mutation-mixed' : 'mutation-external',
         [...dirty]
       );
     }
   }
 
-  function onHeadMutations() {
+  function onRootMutations(records = []) {
+    const attribution = attributeMutations(records || []);
+    if (attribution.source === 'ultrawide') {
+      return;
+    }
+
+    if (!runtime.started) {
+      return;
+    }
+
+    if (!settings.enabled) {
+      removeMainStyle();
+      clearManagedMarkers();
+      clearRootState();
+      return;
+    }
+
+    const currentRoot = getRoot();
+
     if (
-      !document.getElementById(
-        ID.uiStyle
-      )
+      currentRoot !== runtime.observedRoot
+    ) {
+      attachObservers();
+    }
+
+    if (!rootStateMatches()) {
+      setRootState();
+
+      requestRepair(
+        'root-state-repair',
+        [DIRTY.root],
+        true
+      );
+    }
+
+    if (
+      getHead() !== runtime.observedHead ||
+      getBody() !== runtime.observedBody
+    ) {
+      attachObservers();
+
+      requestRepair(
+        'document-lifecycle-repair',
+        ALL_DIRTY_REGIONS,
+        true
+      );
+    }
+  }
+
+  function onHeadMutations(records = []) {
+    const attribution = attributeMutations(records || []);
+    if (attribution.source === 'ultrawide') {
+      return;
+    }
+
+    if (
+      getStyleText(ID.uiStyle) !== getUiCss()
     ) {
       ensureStyle(
         ID.uiStyle,
@@ -4029,9 +7178,7 @@ ${safeMediaCss}
 
     if (
       settings.enabled &&
-      !document.getElementById(
-        ID.style
-      )
+      getStyleText(ID.style) !== getMainCss()
     ) {
       ensureStyle(
         ID.style,
@@ -4047,8 +7194,47 @@ ${safeMediaCss}
   }
 
   function attachObservers() {
+    const root = getRoot();
     const head = getHead();
     const body = getBody();
+
+    if (
+      root &&
+      root !== runtime.observedRoot
+    ) {
+      runtime.rootObserver
+        ?.disconnect();
+
+      const rootEpoch =
+        currentRuntimeEpoch();
+
+      runtime.rootObserver =
+        new MutationObserver(
+          guardRuntimeEpoch(
+            onRootMutations,
+            'root-observer',
+            rootEpoch
+          )
+        );
+
+      runtime.rootObserver.observe(
+        root,
+        {
+          childList: true,
+          attributes: true,
+          attributeFilter: [
+            ATTR.version,
+            ATTR.cap,
+            ATTR.enabled,
+            ATTR.wide,
+            ATTR.left,
+            ATTR.canvas
+          ]
+        }
+      );
+
+      runtime.observedRoot = root;
+    }
 
     if (
       head &&
@@ -4057,15 +7243,26 @@ ${safeMediaCss}
       runtime.headObserver
         ?.disconnect();
 
+      const headEpoch =
+        currentRuntimeEpoch();
+
       runtime.headObserver =
         new MutationObserver(
-          onHeadMutations
+          guardRuntimeEpoch(
+            onHeadMutations,
+            'head-observer',
+            headEpoch
+          )
         );
 
       runtime.headObserver.observe(
         head,
         {
-          childList: true
+          childList: true,
+          subtree: true,
+          characterData: true,
+          attributes: true,
+          attributeFilter: ['data-version']
         }
       );
 
@@ -4079,9 +7276,16 @@ ${safeMediaCss}
       runtime.bodyObserver
         ?.disconnect();
 
+      const bodyEpoch =
+        currentRuntimeEpoch();
+
       runtime.bodyObserver =
         new MutationObserver(
-          onBodyMutations
+          guardRuntimeEpoch(
+            onBodyMutations,
+            'body-observer',
+            bodyEpoch
+          )
         );
 
       runtime.bodyObserver.observe(
@@ -4099,6 +7303,7 @@ ${safeMediaCss}
     }
 
     return Boolean(
+      runtime.observedRoot &&
       runtime.observedHead &&
       runtime.observedBody
     );
@@ -4118,24 +7323,33 @@ ${safeMediaCss}
     runtime.bootstrapObserver
       ?.disconnect();
 
+    const bootstrapEpoch =
+      currentRuntimeEpoch();
+
     runtime.bootstrapObserver =
-      new MutationObserver(() => {
-        if (!attachObservers()) {
-          return;
-        }
+      new MutationObserver(
+        guardRuntimeEpoch(
+          () => {
+            if (!attachObservers()) {
+              return;
+            }
 
-        runtime.bootstrapObserver
-          ?.disconnect();
+            runtime.bootstrapObserver
+              ?.disconnect();
 
-        runtime.bootstrapObserver =
-          null;
+            runtime.bootstrapObserver =
+              null;
 
-        requestRepair(
-          'observer-bootstrap',
-          ALL_DIRTY_REGIONS,
-          true
-        );
-      });
+            requestRepair(
+              'observer-bootstrap',
+              ALL_DIRTY_REGIONS,
+              true
+            );
+          },
+          'bootstrap-observer',
+          bootstrapEpoch
+        )
+      );
 
     runtime.bootstrapObserver.observe(
       root,
@@ -4153,15 +7367,20 @@ ${safeMediaCss}
     runtime.headObserver
       ?.disconnect();
 
+    runtime.rootObserver
+      ?.disconnect();
+
     runtime.bootstrapObserver
       ?.disconnect();
 
     runtime.bodyObserver = null;
     runtime.headObserver = null;
+    runtime.rootObserver = null;
     runtime.bootstrapObserver = null;
 
     runtime.observedBody = null;
     runtime.observedHead = null;
+    runtime.observedRoot = null;
 
     disconnectPaneResizeObserver();
   }
@@ -4235,6 +7454,7 @@ ${safeMediaCss}
       evaluateLayoutInvariants()
     );
     setRootState();
+    syncDebugOverlay();
   }
 
   function isTypingTarget(target) {
@@ -4784,6 +8004,23 @@ ${safeMediaCss}
     );
 
     registerMenu(
+      'debug-overlay',
+      menuToggleLabel(
+        'Debug overlay',
+        settings.debugOverlay,
+        settings.debugOverlay
+          ? 'visible'
+          : 'hidden'
+      ),
+      () => {
+        toggleSetting(
+          'debugOverlay',
+          'Debug overlay'
+        );
+      }
+    );
+
+    registerMenu(
       'scan',
       menuValueLabel(
         '↻',
@@ -4808,6 +8045,18 @@ ${safeMediaCss}
       () => {
         void copyDiagnostics();
       }
+    );
+
+    registerMenu(
+      'download-diagnostics',
+      '⇩  Download diagnostics',
+      downloadDiagnostics
+    );
+
+    registerMenu(
+      'download-bug-report',
+      '⇩  Download bug report',
+      downloadBugReport
     );
 
     registerMenu(
@@ -5129,6 +8378,145 @@ ${safeMediaCss}
     );
   }
 
+  function createRuntimeMetric(label, value, role) {
+    return createElement(
+      'div',
+      {
+        className: 'uwc-metric'
+      },
+      [
+        createElement(
+          'span',
+          {
+            className: 'uwc-metric-label',
+            text: label
+          }
+        ),
+        createElement(
+          'span',
+          {
+            className: 'uwc-metric-value',
+            dataset: {
+              role
+            },
+            text: String(value ?? '—')
+          }
+        )
+      ]
+    );
+  }
+
+  function createRuntimeOverview() {
+    const health = calculateHealthScore();
+    const strategy =
+      runtime.strategySelection ||
+      selectDomStrategy(
+        runtime.lastCapabilities ||
+        detectDomCapabilities()
+      );
+
+    return createElement(
+      'div',
+      {
+        className: 'uwc-overview',
+        'aria-label': 'Runtime overview'
+      },
+      [
+        createRuntimeMetric(
+          'Health',
+          `${health.score}/100`,
+          'metric-health'
+        ),
+        createRuntimeMetric(
+          'Strategy',
+          strategy.id || 'unknown',
+          'metric-strategy'
+        ),
+        createRuntimeMetric(
+          'Confidence',
+          `${strategy.confidence || 0}%`,
+          'metric-confidence'
+        ),
+        createRuntimeMetric(
+          'Pane',
+          `${getAdaptiveWidth()}px`,
+          'metric-pane'
+        ),
+        createRuntimeMetric(
+          'Turns',
+          runtime.lastTurnCount,
+          'metric-turns'
+        ),
+        createRuntimeMetric(
+          'Watchdog',
+          runtime.watchdogIntervalMs
+            ? `${runtime.watchdogIntervalMs}ms`
+            : 'idle',
+          'metric-watchdog'
+        )
+      ]
+    );
+  }
+
+  function createHealthBreakdownPanel() {
+    const health =
+      calculateHealthScore();
+
+    const labels = {
+      runtime: 'Runtime',
+      styles: 'Styles',
+      dom: 'DOM',
+      width: 'Width',
+      reconciliation: 'Reconcile',
+      performance: 'Performance'
+    };
+
+    return createElement(
+      'div',
+      {
+        className:
+          'uwc-health-breakdown',
+        'aria-label':
+          'Health breakdown'
+      },
+      Object.entries(
+        health.breakdown
+      ).map(([key, value]) =>
+        createElement(
+          'div',
+          {
+            className:
+              'uwc-health-item'
+          },
+          [
+            createElement(
+              'span',
+              {
+                className:
+                  'uwc-health-label',
+                text:
+                  labels[key] || key
+              }
+            ),
+            createElement(
+              'span',
+              {
+                className:
+                  'uwc-health-value',
+                dataset: {
+                  healthComponent:
+                    key
+                },
+                text:
+                  `${value}`
+              }
+            )
+          ]
+        )
+      )
+    );
+  }
+
   function syncSettingsModal() {
     const modal =
       document.getElementById(
@@ -5210,7 +8598,88 @@ ${safeMediaCss}
 
       if (statusDetail) {
         statusDetail.textContent =
-          ` ${getStatusText()}`;
+          getStatusText();
+      }
+
+      const statusCard =
+        modal.querySelector(
+          '[data-role="status-card"]'
+        );
+
+      if (statusCard) {
+        statusCard.dataset.state =
+          isWideActive()
+            ? 'active'
+            : 'inactive';
+      }
+
+      try {
+        const health =
+          calculateHealthScore();
+
+        const strategy =
+          runtime.strategySelection ||
+          selectDomStrategy(
+            runtime.lastCapabilities ||
+            detectDomCapabilities()
+          );
+
+        const metricValues = {
+          'metric-health':
+            `${health.score}/100`,
+          'metric-strategy':
+            strategy.id || 'unknown',
+          'metric-confidence':
+            `${strategy.confidence || 0}%`,
+          'metric-pane':
+            `${getAdaptiveWidth()}px`,
+          'metric-turns':
+            String(runtime.lastTurnCount),
+          'metric-watchdog':
+            runtime.watchdogIntervalMs
+              ? `${runtime.watchdogIntervalMs}ms`
+              : 'idle',
+          'health-pill':
+            `${health.score} · ${health.status}`
+        };
+
+        for (
+          const [role, value] of
+          Object.entries(metricValues)
+        ) {
+          const target =
+            modal.querySelector(
+              `[data-role="${role}"]`
+            );
+
+          if (target) {
+            target.textContent =
+              value;
+          }
+        }
+
+        for (
+          const [key, value] of
+          Object.entries(
+            health.breakdown || {}
+          )
+        ) {
+          const target =
+            modal.querySelector(
+              `[data-health-component="${key}"]`
+            );
+
+          if (target) {
+            target.textContent =
+              String(value);
+          }
+        }
+      } catch (error) {
+        runtime.lastError =
+          String(
+            error?.message ||
+            error
+          );
       }
     } finally {
       runtime.modalSyncing = false;
@@ -5450,7 +8919,7 @@ ${safeMediaCss}
                               className:
                                 'uwc-title',
                               text:
-                                'UltraWide ChatGPT'
+                                PRODUCT_NAME
                             }
                           ),
                           createElement(
@@ -5506,33 +8975,69 @@ ${safeMediaCss}
                         'uwc-status',
                       role: 'status',
                       'aria-live':
-                        'polite'
+                        'polite',
+                      dataset: {
+                        role: 'status-card',
+                        state:
+                          isWideActive()
+                            ? 'active'
+                            : 'inactive'
+                      }
                     },
                     [
                       createElement(
-                        'strong',
+                        'div',
                         {
-                          dataset: {
-                            role: 'status-title'
-                          },
-                          text:
-                            isWideActive()
-                              ? 'UltraWide is active'
-                              : 'UltraWide is inactive'
-                        }
+                          className:
+                            'uwc-status-main'
+                        },
+                        [
+                          createElement(
+                            'strong',
+                            {
+                              dataset: {
+                                role: 'status-title'
+                              },
+                              text:
+                                isWideActive()
+                                  ? 'UltraWide is active'
+                                  : 'UltraWide is inactive'
+                            }
+                          ),
+                          createElement(
+                            'span',
+                            {
+                              className:
+                                'uwc-status-detail',
+                              dataset: {
+                                role: 'status-detail'
+                              },
+                              text:
+                                getStatusText()
+                            }
+                          )
+                        ]
                       ),
                       createElement(
                         'span',
                         {
+                          className:
+                            'uwc-health-pill',
                           dataset: {
-                            role: 'status-detail'
+                            role: 'health-pill'
                           },
-                          text:
-                            ` ${getStatusText()}`
+                          text: (() => {
+                            const health =
+                              calculateHealthScore();
+                            return `${health.score} · ${health.status}`;
+                          })()
                         }
                       )
                     ]
                   ),
+
+                  createRuntimeOverview(),
+                  createHealthBreakdownPanel(),
 
                   createSection(
                     'Layout',
@@ -5640,116 +9145,198 @@ ${safeMediaCss}
                     ]
                   ),
 
-                  createSection(
-                    'Runtime',
+                  createElement(
+                    'details',
+                    {
+                      className:
+                        'uwc-advanced'
+                    },
                     [
+                      createElement(
+                        'summary',
+                        {
+                          text:
+                            'Advanced runtime & diagnostics'
+                        }
+                      ),
                       createElement(
                         'div',
                         {
                           className:
-                            'uwc-grid'
+                            'uwc-advanced-body'
                         },
                         [
-                          createNumberInput(
-                            'scanDebounceMs',
-                            'DOM scan debounce',
-                            'Higher values reduce DOM activity'
+                          createSection(
+                            'Runtime',
+                            [
+                              createElement(
+                                'div',
+                                {
+                                  className:
+                                    'uwc-grid'
+                                },
+                                [
+                                  createNumberInput(
+                                    'scanDebounceMs',
+                                    'DOM scan debounce',
+                                    'Higher values reduce DOM activity'
+                                  ),
+                                  createNumberInput(
+                                    'repairIntervalMs',
+                                    'Repair interval',
+                                    'Lightweight integrity check'
+                                  ),
+                                  createNumberInput(
+                                    'routePollMs',
+                                    'SPA route fallback interval'
+                                  ),
+                                  createNumberInput(
+                                    'toastMs',
+                                    'Status-message duration'
+                                  ),
+                                  createCheckbox(
+                                    'pauseWhenHidden',
+                                    'Pause background work in hidden tabs'
+                                  ),
+                                  createCheckbox(
+                                    'performanceTelemetry',
+                                    'Collect lightweight scan timing'
+                                  ),
+                                  createCheckbox(
+                                    'debugOverlay',
+                                    'Show debug overlay'
+                                  ),
+                                  createCheckbox(
+                                    'closeSettingsOnBackdrop',
+                                    'Close settings on backdrop'
+                                  )
+                                ]
+                              )
+                            ]
                           ),
-                          createNumberInput(
-                            'repairIntervalMs',
-                            'Repair interval',
-                            'Lightweight integrity check'
+                          createSection(
+                            'Shortcuts',
+                            [
+                              createElement(
+                                'div',
+                                {
+                                  className:
+                                    'uwc-shortcuts'
+                                },
+                                [
+                                  createElement('span',{text:'Alt+O Script'}),
+                                  createElement('span',{text:'Alt+U UltraWide'}),
+                                  createElement('span',{text:'Alt+L Align'}),
+                                  createElement('span',{text:'Alt+M Width'}),
+                                  createElement('span',{text:'Alt+A Adaptive'}),
+                                  createElement('span',{text:'Alt+C Canvas'}),
+                                  createElement('span',{text:'Alt+S Settings'}),
+                                  createElement('span',{text:'Alt+R Reset'})
+                                ]
+                              )
+                            ]
                           ),
-                          createNumberInput(
-                            'routePollMs',
-                            'SPA route fallback interval'
-                          ),
-                          createNumberInput(
-                            'toastMs',
-                            'Status-message duration'
-                          ),
-                          createCheckbox(
-                            'pauseWhenHidden',
-                            'Pause background work in hidden tabs'
-                          ),
-                          createCheckbox(
-                            'performanceTelemetry',
-                            'Collect lightweight scan timing'
-                          ),
-                          createCheckbox(
-                            'closeSettingsOnBackdrop',
-                            'Close settings on backdrop'
-                          )
-                        ]
-                      )
-                    ]
-                  ),
+                          createElement(
+                            'div',
+                            {
+                              className:
+                                'uwc-inline-actions'
+                            },
+                            [
+                              createElement(
+                                'button',
+                                {
+                                  type: 'button',
+                                  text:
+                                    'Download diagnostics',
+                                  onclick:
+                                    downloadDiagnostics
+                                }
+                              ),
+                              createElement(
+                                'button',
+                                {
+                                  type: 'button',
+                                  text:
+                                    'Download bug report',
+                                  onclick:
+                                    downloadBugReport
+                                }
+                              ),
+                              createElement(
+                                'button',
+                                {
+                                  type: 'button',
+                                  text:
+                                    'Lifecycle torture test',
+                                  onclick: async (event) => {
+                                    const button =
+                                      event?.currentTarget;
 
-                  createSection(
-                    'Shortcuts',
-                    [
-                      createElement(
-                        'div',
-                        {
-                          className:
-                            'uwc-shortcuts'
-                        },
-                        [
-                          createElement(
-                            'span',
-                            {
-                              text:
-                                'Alt+O Script'
-                            }
-                          ),
-                          createElement(
-                            'span',
-                            {
-                              text:
-                                'Alt+U UltraWide'
-                            }
-                          ),
-                          createElement(
-                            'span',
-                            {
-                              text:
-                                'Alt+L Align'
-                            }
-                          ),
-                          createElement(
-                            'span',
-                            {
-                              text:
-                                'Alt+M Width'
-                            }
-                          ),
-                          createElement(
-                            'span',
-                            {
-                              text:
-                                'Alt+A Adaptive'
-                            }
-                          ),
-                          createElement(
-                            'span',
-                            {
-                              text:
-                                'Alt+C Canvas'
-                            }
-                          ),
-                          createElement(
-                            'span',
-                            {
-                              text:
-                                'Alt+S Settings'
-                            }
-                          ),
-                          createElement(
-                            'span',
-                            {
-                              text:
-                                'Alt+R Reset'
-                            }
+                                    if (button) {
+                                      button.disabled = true;
+                                    }
+
+                                    showToast(
+                                      'Running lifecycle torture test…'
+                                    );
+
+                                    try {
+                                      const result =
+                                        await lifecycleTortureSelfTest();
+
+                                      if (
+                                        runtime.started &&
+                                        !document.getElementById(
+                                          ID.modal
+                                        )
+                                      ) {
+                                        openSettings();
+                                      }
+
+                                      syncSettingsModal();
+
+                                      showToast(
+                                        result.ok
+                                          ? 'Lifecycle torture test passed'
+                                          : 'Lifecycle torture test found issues'
+                                      );
+                                    } catch (error) {
+                                      runtime.lastError =
+                                        String(
+                                          error?.message ||
+                                          error
+                                        );
+
+                                      if (
+                                        runtime.started &&
+                                        !document.getElementById(
+                                          ID.modal
+                                        )
+                                      ) {
+                                        openSettings();
+                                      }
+
+                                      showToast(
+                                        'Lifecycle torture test failed'
+                                      );
+                                    } finally {
+                                      const liveButton =
+                                        document.querySelector(
+                                          `#${ID.modal} button[data-role="lifecycle-test"]`
+                                        );
+
+                                      if (liveButton) {
+                                        liveButton.disabled = false;
+                                      }
+                                    }
+                                  },
+                                  dataset: {
+                                    role: 'lifecycle-test'
+                                  }
+                                }
+                              )
+                            ]
                           )
                         ]
                       )
@@ -5768,13 +9355,74 @@ ${safeMediaCss}
                         {
                           type: 'button',
                           text:
-                            'Rescan layout',
+                            'Repair now',
                           onclick: () => {
-                            scheduleScan(true);
+                            try {
+                              const result =
+                                reconcileDesiredState(
+                                  'settings-repair'
+                                );
 
-                            showToast(
-                              'UltraWide layout rescanned'
-                            );
+                              syncSettingsModal();
+
+                              if (result.pending) {
+                                showToast(
+                                  'Repair scheduled · verification pending'
+                                );
+                              } else if (result.ok) {
+                                showToast(
+                                  result.changed
+                                    ? 'UltraWide repaired and verified'
+                                    : 'UltraWide already verified'
+                                );
+                              } else {
+                                showToast(
+                                  'Repair completed with remaining issues'
+                                );
+                              }
+                            } catch (error) {
+                              runtime.lastError =
+                                String(
+                                  error?.message ||
+                                  error
+                                );
+
+                              showToast(
+                                'Repair failed · see diagnostics'
+                              );
+                            }
+                          }
+                        }
+                      ),
+                      createElement(
+                        'button',
+                        {
+                          type: 'button',
+                          text:
+                            'Run self-test',
+                          onclick: () => {
+                            try {
+                              const result =
+                                selfTest();
+
+                              syncSettingsModal();
+
+                              showToast(
+                                result.ok
+                                  ? `Self-test passed · ${result.health.score}/100`
+                                  : `Self-test found issues · ${result.health.score}/100`
+                              );
+                            } catch (error) {
+                              runtime.lastError =
+                                String(
+                                  error?.message ||
+                                  error
+                                );
+
+                              showToast(
+                                'Self-test failed · see diagnostics'
+                              );
+                            }
                           }
                         }
                       ),
@@ -5785,7 +9433,18 @@ ${safeMediaCss}
                           text:
                             'Copy diagnostics',
                           onclick: () => {
-                            void copyDiagnostics();
+                            void copyDiagnostics()
+                              .catch((error) => {
+                                runtime.lastError =
+                                  String(
+                                    error?.message ||
+                                    error
+                                  );
+
+                                showToast(
+                                  'Diagnostics copy failed'
+                                );
+                              });
                           }
                         }
                       ),
@@ -5922,14 +9581,47 @@ ${safeMediaCss}
         !settings.enabled ||
         root?.getAttribute(ATTR.version) === VERSION,
       mainStyle:
-        !settings.enabled ||
-        mainStyle?.textContent === getMainCss(),
+        settings.enabled
+          ? mainStyle?.textContent === getMainCss()
+          : !mainStyle,
+      disabledRootClean:
+        settings.enabled ||
+        ![
+          ATTR.version,
+          ATTR.cap,
+          ATTR.enabled,
+          ATTR.wide,
+          ATTR.left,
+          ATTR.canvas
+        ].some((attribute) =>
+          root?.hasAttribute(attribute)
+        ),
+      disabledMarkersClean:
+        settings.enabled ||
+        !MANAGED_MARKERS.some(
+          hasConnectedMarker
+        ),
       uiStyle:
         uiStyle?.textContent === getUiCss(),
+      rootObserver:
+        Boolean(runtime.rootObserver),
       bodyObserver:
         Boolean(runtime.bodyObserver),
       headObserver:
         Boolean(runtime.headObserver),
+      enforcementTimer:
+        Boolean(runtime.enforcementTimer),
+      domFingerprint:
+        Boolean(runtime.lastDomFingerprint || computeDomFingerprint()),
+      strategyConfidence:
+        !(runtime.strategySelection || selectDomStrategy(runtime.lastCapabilities || detectDomCapabilities())).lowConfidence,
+      convergence:
+        runtime.convergenceStallCount < CONFIG.convergenceHardLimit,
+      widthVerification:
+        verifyAppliedWidths().ok,
+      rootState:
+        !settings.enabled ||
+        rootStateMatches(),
       paneObserver:
         typeof ResizeObserver !== 'function' ||
         Boolean(runtime.paneResizeObserver) ||
@@ -5945,8 +9637,9 @@ ${safeMediaCss}
       schedulerState:
         runtime.pendingRepairReasons instanceof Set &&
         runtime.pendingDirtyRegions instanceof Set,
+      safeFallbackInactive:
+        !runtime.safeFallbackActive,
       invariants:
-        runtime.safeFallbackActive ||
         evaluateLayoutInvariants().ok
     };
 
@@ -5966,6 +9659,7 @@ ${safeMediaCss}
 
     return {
       generatedAt: new Date().toISOString(),
+      name: PRODUCT_NAME,
       version: VERSION,
       userAgent: navigator.userAgent,
       viewport: {
@@ -6011,7 +9705,26 @@ ${safeMediaCss}
         dom: capabilities
       },
       compatibility,
-      health: verifyRuntime(),
+      health: {
+        ...verifyRuntime(),
+        ...calculateHealthScore()
+      },
+      widthVerification: runtime.lastWidthVerification || verifyAppliedWidths(),
+      desiredState: runtime.lastDesiredState,
+      actualState: runtime.lastActualState,
+      stateDiff: runtime.lastStateDiff,
+      domFingerprint: {
+        value: runtime.lastDomFingerprint || computeDomFingerprint(),
+        lastChangedAt: runtime.lastDomFingerprintAt,
+        changeCount: runtime.domFingerprintChanges
+      },
+      selectorHealth:
+        getSelectorHealthSummary(),
+      repairEffectiveness:
+        getRepairEffectivenessMetrics(),
+      performanceBudget:
+        getPerformanceBudgetReport(),
+      repairHistory: [...runtime.repairHistory],
       runtime: {
         repairRequests: runtime.repairRequestCount,
         repairPasses: runtime.repairPassCount,
@@ -6022,8 +9735,34 @@ ${safeMediaCss}
         pendingDirtyRegions: [...runtime.pendingDirtyRegions],
         invariants: runtime.lastInvariants,
         invariantFailureStreak: runtime.invariantFailureStreak,
+        enforcementChecks: runtime.enforcementCheckCount,
+        enforcementRepairs: runtime.enforcementRepairCount,
+        enforcementRetries: runtime.enforcementRetryCount,
+        enforcementLevel: runtime.enforcementLevel,
+        watchdogIntervalMs: runtime.watchdogIntervalMs,
+        stableWatchdogPasses: runtime.stableWatchdogPasses,
+        lastEnforcementAt: runtime.lastEnforcementAt,
+        lastEnforcementRepairAt: runtime.lastEnforcementRepairAt,
+        lastEnforcementFailures: [...runtime.lastEnforcementFailures],
         safeFallbackActive: runtime.safeFallbackActive,
         safeFallbackReason: runtime.safeFallbackReason,
+        reconcileInProgress: runtime.reconcileInProgress,
+        reconcilePendingVerification:
+          runtime.reconcilePendingVerification,
+        reconcilePendingSince:
+          runtime.reconcilePendingSince,
+        queuedReconciliationReasons: [
+          ...runtime.queuedReconciliationReasons
+        ],
+        queuedReconciliationRequests:
+          runtime.queuedReconciliationRequestCount,
+        queuedReconciliationRuns:
+          runtime.queuedReconciliationRunCount,
+        reconcileLockContentions:
+          runtime.reconcileLockContentionCount,
+        epoch: runtime.epoch,
+        staleCallbacksBlocked:
+          runtime.staleCallbackCount,
         debugEvents: [...runtime.debugEvents]
       },
       state
@@ -6068,8 +9807,90 @@ ${safeMediaCss}
     return false;
   }
 
+  function downloadDiagnostics() {
+    const ok = downloadTextFile(
+      `ultrawide-diagnostics-${Date.now()}.json`,
+      JSON.stringify(
+        getDiagnostics(),
+        null,
+        2
+      ),
+      'application/json'
+    );
+
+    showToast(
+      ok
+        ? 'UltraWide diagnostics downloaded'
+        : 'Diagnostics download failed'
+    );
+
+    return ok;
+  }
+
+  function createBugReport() {
+    const diagnostics = getDiagnostics();
+    const health = diagnostics.health;
+    const compatibility = diagnostics.compatibility;
+    const state = diagnostics.state;
+
+    return [
+      `# ${PRODUCT_NAME} Bug Report`,
+      '',
+      '## Summary',
+      '- What happened:',
+      '- What you expected:',
+      '- Steps to reproduce:',
+      '',
+      '## Environment',
+      `- Version: ${diagnostics.version}`,
+      `- URL: ${diagnostics.document.url}`,
+      `- User agent: ${diagnostics.userAgent}`,
+      `- Viewport: ${diagnostics.viewport.width}x${diagnostics.viewport.height}`,
+      `- Pane: ${diagnostics.pane.width}x${diagnostics.pane.height} (${diagnostics.pane.source})`,
+      '',
+      '## Layout State',
+      `- Active wide: ${state.activeWide}`,
+      `- Cap: ${state.cap}`,
+      `- Turns: ${state.detectedTurns}/${state.rawTurnCandidates}`,
+      `- Composer found: ${state.composerFound}`,
+      `- Split view detected: ${state.canvasDetected}`,
+      `- Safe fallback: ${state.safeFallbackActive}${state.safeFallbackReason ? ` (${state.safeFallbackReason})` : ''}`,
+      '',
+      '## Compatibility',
+      `- Status: ${compatibility.status}`,
+      `- Strategy: ${compatibility.strategy}`,
+      `- Issues: ${compatibility.issues.length ? compatibility.issues.join(', ') : 'none'}`,
+      '',
+      '## Health',
+      `- OK: ${health.ok}`,
+      '```json',
+      JSON.stringify(health.checks, null, 2),
+      '```',
+      '',
+      '## Last Error',
+      state.lastError || 'none'
+    ].join('\n');
+  }
+
+  function downloadBugReport() {
+    const ok = downloadTextFile(
+      `ultrawide-bug-report-${Date.now()}.md`,
+      createBugReport(),
+      'text/markdown'
+    );
+
+    showToast(
+      ok
+        ? 'UltraWide bug report downloaded'
+        : 'Bug report download failed'
+    );
+
+    return ok;
+  }
+
   function getState() {
     return {
+      name: PRODUCT_NAME,
       version: VERSION,
       started: runtime.started,
       href: runtime.href,
@@ -6153,6 +9974,29 @@ ${safeMediaCss}
         runtime.measuredScanCount,
       scanCount:
         runtime.scanCount,
+      selectorHealth:
+        getSelectorHealthSummary(),
+      repairEffectiveness:
+        getRepairEffectivenessMetrics(),
+      performanceBudget:
+        getPerformanceBudgetReport(),
+      healthBreakdown:
+        runtime.healthBreakdown ||
+        calculateHealthScore().breakdown,
+      runtimeEpoch:
+        runtime.epoch,
+      staleCallbacksBlocked:
+        runtime.staleCallbackCount,
+      reconcileInProgress:
+        runtime.reconcileInProgress,
+      reconcilePendingVerification:
+        runtime.reconcilePendingVerification,
+      reconcilePendingSince:
+        runtime.reconcilePendingSince,
+      queuedReconciliationRequests:
+        runtime.queuedReconciliationRequestCount,
+      queuedReconciliationRuns:
+        runtime.queuedReconciliationRunCount,
       repairRequestCount:
         runtime.repairRequestCount,
       repairPassCount:
@@ -6165,6 +10009,22 @@ ${safeMediaCss}
         [...runtime.lastRepairReasons],
       invariantFailureStreak:
         runtime.invariantFailureStreak,
+      enforcementCheckCount:
+        runtime.enforcementCheckCount,
+      enforcementRepairCount:
+        runtime.enforcementRepairCount,
+      enforcementRetryCount:
+        runtime.enforcementRetryCount,
+      lastEnforcementAt:
+        runtime.lastEnforcementAt,
+      lastEnforcementRepairAt:
+        runtime.lastEnforcementRepairAt,
+      lastEnforcementFailures:
+        [...runtime.lastEnforcementFailures],
+      enforcementTimerActive:
+        Boolean(runtime.enforcementTimer),
+      rootObserverAttached:
+        Boolean(runtime.rootObserver),
       invariants:
         runtime.lastInvariants,
       safeFallbackActive:
@@ -6183,6 +10043,8 @@ ${safeMediaCss}
         settings.pauseWhenHidden,
       performanceTelemetry:
         settings.performanceTelemetry,
+      debugOverlay:
+        settings.debugOverlay,
       lastError:
         runtime.lastError,
       storageAvailable:
@@ -6240,12 +10102,34 @@ ${safeMediaCss}
     cleanupLegacyArtifacts();
     loadSettings();
 
+    runtime.epoch += 1;
     runtime.started = true;
     runtime.instanceStartedAt = Date.now();
     runtime.href = location.href;
     runtime.safeFallbackActive = false;
     runtime.safeFallbackReason = '';
     runtime.invariantFailureStreak = 0;
+    runtime.enforcementLevel = 0;
+    runtime.stableWatchdogPasses = 0;
+    runtime.repairHistory = [];
+    runtime.lastRepairPlan = null;
+    runtime.lastRepairPlanResult = null;
+    runtime.convergenceSignature = '';
+    runtime.convergencePreviousFailureCount = 0;
+    runtime.convergenceStallCount = 0;
+    runtime.lastConvergence = null;
+    runtime.strategySelection = null;
+    runtime.lastMutationAttribution = null;
+    runtime.reconcileInProgress = false;
+    runtime.reconcilePendingVerification = false;
+    runtime.reconcilePendingSince = 0;
+    runtime.queuedReconciliationReasons.clear();
+    runtime.queuedReconciliationRequestCount = 0;
+    runtime.queuedReconciliationRunCount = 0;
+    runtime.reconcileLockContentionCount = 0;
+    runtime.selectorHealth.clear();
+    runtime.lastSelectorHealthAt = 0;
+    runtime.performanceBudgetState.clear();
     pushDebugEvent('runtime-start', {
       href: runtime.href
     });
@@ -6263,6 +10147,8 @@ ${safeMediaCss}
     );
 
     applyStyles();
+    updateDomFingerprint('start');
+    calculateHealthScore();
   }
 
   function stop() {
@@ -6271,9 +10157,22 @@ ${safeMediaCss}
     }
 
     pushDebugEvent('runtime-stop');
+    runtime.epoch += 1;
     runtime.started = false;
 
     cancelScheduledScan();
+
+    if (runtime.queuedReconciliationFrame) {
+      cancelNextFrame(
+        runtime.queuedReconciliationFrame
+      );
+      runtime.queuedReconciliationFrame = 0;
+    }
+
+    runtime.reconcileInProgress = false;
+    runtime.reconcilePendingVerification = false;
+    runtime.reconcilePendingSince = 0;
+    runtime.queuedReconciliationReasons.clear();
     runtime.pendingRepairReasons.clear();
     runtime.pendingDirtyRegions.clear();
 
@@ -6286,6 +10185,12 @@ ${safeMediaCss}
     if (runtime.routeTimer) {
       clearInterval(
         runtime.routeTimer
+      );
+    }
+
+    if (runtime.enforcementTimer) {
+      clearTimeout(
+        runtime.enforcementTimer
       );
     }
 
@@ -6303,6 +10208,7 @@ ${safeMediaCss}
 
     runtime.repairTimer = 0;
     runtime.routeTimer = 0;
+    runtime.enforcementTimer = 0;
     runtime.routeDelayTimer = 0;
     runtime.toastTimer = 0;
 
@@ -6317,6 +10223,7 @@ ${safeMediaCss}
     removeMainStyle();
     removeUiStyle();
     removeById(ID.toast);
+    removeById(ID.debugOverlay);
     closeSettings({
       reloadIfChanged: false
     });
@@ -6347,6 +10254,7 @@ ${safeMediaCss}
         {
           configurable: true,
           value: Object.freeze({
+            name: PRODUCT_NAME,
             version: VERSION,
 
             start,
@@ -6364,6 +10272,38 @@ ${safeMediaCss}
             diagnostics: getDiagnostics,
             capabilities: detectDomCapabilities,
             verify: verifyRuntime,
+            enforce: () =>
+              enforceRuntimeIntegrity('api'),
+            reconcile: () =>
+              reconcileDesiredState('api'),
+            selfTest,
+            regressionTest,
+            health: calculateHealthScore,
+            healthBreakdown: getHealthBreakdown,
+            selectorHealth: () =>
+              getSelectorHealthSummary(true),
+            repairEffectiveness:
+              getRepairEffectivenessMetrics,
+            performanceBudget:
+              getPerformanceBudgetReport,
+            repairHistory: () => [
+              ...runtime.repairHistory
+            ],
+            strategy: () =>
+              runtime.strategySelection ||
+              selectDomStrategy(
+                runtime.lastCapabilities || detectDomCapabilities()
+              ),
+            repairPlan: () =>
+              runtime.lastRepairPlan,
+            failureCodes: () => ({
+              ...FAILURE_CODE
+            }),
+            convergence: () =>
+              runtime.lastConvergence,
+            lifecycleTortureSelfTest,
+            fingerprint: () =>
+              updateDomFingerprint('api'),
             invariants: evaluateLayoutInvariants,
             debugEvents: () => [
               ...runtime.debugEvents
@@ -6381,6 +10321,8 @@ ${safeMediaCss}
               return cleared;
             },
             copyDiagnostics,
+            downloadDiagnostics,
+            downloadBugReport,
 
             caps: () => [
               ...CAPS
