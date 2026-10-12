@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UltraWide ChatGPT
 // @namespace    https://www.instagram.com/jsm.ig/
-// @version      2026.10.06.22
+// @version      2026.10.12.1
 // @author       jsmdev
 // @description  UltraWide ChatGPT provides a robust ultra-wide layout for current ChatGPT Chat and Work with adaptive width, split-view safety, diagnostics, settings, SPA support, and complete cleanup.
 // @license      MIT
@@ -14,13 +14,11 @@
 // @grant        GM_setValue
 // @grant        GM_registerMenuCommand
 // @grant        GM_unregisterMenuCommand
-// @downloadURL https://update.greasyfork.org/scripts/557270/Wide%20ChatGPT.user.js
-// @updateURL https://update.greasyfork.org/scripts/557270/Wide%20ChatGPT.meta.js
 // ==/UserScript==
 
 /*
   UltraWide ChatGPT
-  Version: 2026.10.06.22
+  Version: 2026.10.12.1
 
   Improvements
   - Updated for the current ChatGPT Chat + Work web surface
@@ -102,6 +100,14 @@
   - Adds pending-reconciliation gating so full-scan repairs cannot spawn overlapping reconciliation passes before verification
   - Clears queued reconciliation state when pending asynchronous repair work is superseded by a runtime stop or restart
   - Extends regression coverage for canonical branding and pending-reconciliation contracts
+  - Low-power mode reduces routine scans and watchdog/poll frequency without removing recovery
+  - Memoizes short-lived DOM capability checks and avoids duplicate scans per repair pass
+  - Skips structural rescans on ordinary streamed content inside already managed turns
+  - Throttles unrelated free-plan-notice searches and caps diagnostic visibility sampling
+  - Reduces needless large-subtree inspection on child-list mutations
+  - Retains immediate repair of structural changes, manual checks, and diagnostics
+  - Filters irrelevant head mutations to avoid unnecessary style integrity scans
+  - Retains immediate detection for small new free-plan notices under throttling
 
   Shortcuts
   - Alt+O  Enable/disable script
@@ -112,6 +118,11 @@
   - Alt+C  Enable/disable split-view safe mode
   - Alt+S  Open settings
   - Alt+R  Reset settings
+
+  Low-power mode (enabled by default)
+  - Coalesces structural scans and avoids rescanning streamed message content
+  - Limits routine repair/polling while retaining immediate DOM structural checks
+  - Full diagnostics and manual repair remain available
 
   Console API
   - window.__mlUltraWide.state()
@@ -149,7 +160,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '2026.10.06.22';
+  const VERSION = '2026.10.12.1';
   const PRODUCT_NAME = 'UltraWide ChatGPT';
   const STORAGE_KEY = 'uwc.settings.v14';
 
@@ -270,6 +281,7 @@
     scanDebounceMs: 240,
     repairIntervalMs: 10000,
     routePollMs: 10000,
+    lowPowerMode: true,
 
     pauseWhenHidden: true,
     performanceTelemetry: true,
@@ -321,6 +333,12 @@
     convergenceHardLimit: 6,
     lifecycleTortureCycles: 3,
     selectorHealthStaleMs: 5000,
+    lowPowerCapabilityCacheMs: 1200,
+    lowPowerSelectorHealthStaleMs: 30000,
+    lowPowerNoticeThrottleMs: 15000,
+    lowPowerScanDebounceMs: 550,
+    lowPowerRepairIntervalMs: 30000,
+    lowPowerRoutePollMs: 30000,
     selectorHealthMissingThreshold: 3,
     reloadLoopWindowMs: 10000,
     reloadLoopMaxCount: 2,
@@ -751,6 +769,9 @@
     healthBreakdown: null,
     selectorHealth: new Map(),
     lastSelectorHealthAt: 0,
+    lastCapabilitiesAt: 0,
+    lastPlanNoticeScanAt: 0,
+    skippedContentMutationBatches: 0,
     repairHistory: [],
     strategySelection: null,
     performanceBudgetState: new Map(),
@@ -890,6 +911,7 @@
   function updateSelectorHealth() {
     const now = Date.now();
     const snapshot = {};
+    const visibilitySampleLimit = settings.lowPowerMode ? 16 : 200;
 
     for (const target of SELECTOR_HEALTH_TARGETS) {
       let nodes = [];
@@ -903,7 +925,7 @@
       } catch (_) {}
 
       const visibleCount =
-        nodes.slice(0, 200)
+        nodes.slice(0, visibilitySampleLimit)
           .filter(isVisibleElement)
           .length;
 
@@ -960,7 +982,9 @@
       refresh ||
       !runtime.lastSelectorHealthAt ||
       Date.now() - runtime.lastSelectorHealthAt >
-        CONFIG.selectorHealthStaleMs
+        (settings.lowPowerMode
+          ? CONFIG.lowPowerSelectorHealthStaleMs
+          : CONFIG.selectorHealthStaleMs)
     ) {
       updateSelectorHealth();
     }
@@ -1580,6 +1604,11 @@
       output.routePollMs
     );
 
+    output.lowPowerMode = normalizeBoolean(
+      input.lowPowerMode,
+      output.lowPowerMode
+    );
+
     output.pauseWhenHidden = normalizeBoolean(
       input.pauseWhenHidden,
       output.pauseWhenHidden
@@ -1903,7 +1932,17 @@
     );
   }
 
-  function detectDomCapabilities() {
+  function detectDomCapabilities(force = false) {
+    const now = Date.now();
+    if (
+      settings.lowPowerMode &&
+      !force &&
+      runtime.lastCapabilities &&
+      now - runtime.lastCapabilitiesAt < CONFIG.lowPowerCapabilityCacheMs
+    ) {
+      return runtime.lastCapabilities;
+    }
+
     const queryOne = (selector) => {
       try {
         return Boolean(document.querySelector(selector));
@@ -1957,11 +1996,13 @@
     capabilities.strategyCandidates = selection.candidates;
 
     runtime.lastCapabilities = capabilities;
+    runtime.lastCapabilitiesAt = now;
 
     if (
-      !runtime.lastSelectorHealthAt ||
+      !settings.lowPowerMode &&
+      (!runtime.lastSelectorHealthAt ||
       Date.now() - runtime.lastSelectorHealthAt >
-        CONFIG.selectorHealthStaleMs
+        CONFIG.selectorHealthStaleMs)
     ) {
       updateSelectorHealth();
     }
@@ -4073,6 +4114,7 @@ ${safeMediaCss}
   }
 
   function markPlanNotice(desired) {
+    runtime.lastPlanNoticeScanAt = Date.now();
     if (!isWideActive()) {
       runtime.lastPlanNoticeCandidateCount = 0;
       return;
@@ -4289,8 +4331,7 @@ ${safeMediaCss}
     };
   }
 
-  function computeDomFingerprint() {
-    const capabilities = detectDomCapabilities();
+  function fingerprintFromCapabilities(capabilities) {
     const parts = [
       capabilities.strategy || 'unknown',
       `sc${capabilities.strategyConfidence || 0}`,
@@ -4306,8 +4347,14 @@ ${safeMediaCss}
     return parts.join('|');
   }
 
-  function updateDomFingerprint(reason = 'scan') {
-    const next = computeDomFingerprint();
+  function computeDomFingerprint() {
+    return fingerprintFromCapabilities(detectDomCapabilities());
+  }
+
+  function updateDomFingerprint(reason = 'scan', capabilities = null) {
+    const next = capabilities
+      ? fingerprintFromCapabilities(capabilities)
+      : computeDomFingerprint();
     const previous = runtime.lastDomFingerprint;
     const changed = Boolean(previous && previous !== next);
 
@@ -5467,6 +5514,45 @@ ${safeMediaCss}
     );
 
     test(
+      'low-power-settings-contract',
+      () => ({
+        ok:
+          normalizeSettings({}).lowPowerMode === true &&
+          normalizeSettings({lowPowerMode: false}).lowPowerMode === false &&
+          normalizeSettings({lowPowerMode: 'false'}).lowPowerMode === true
+      })
+    );
+
+    test(
+      'low-power-stream-mutation-contract',
+      () => {
+        const turn = document.createElement('article');
+        turn.setAttribute(ATTR.turn, '1');
+        const container = document.createElement('div');
+        turn.appendChild(container);
+        const normal = document.createElement('span');
+        const structural = document.createElement('div');
+        structural.setAttribute('data-turn-key', 'synthetic');
+        const textRecord = {
+          type: 'childList',
+          target: container,
+          addedNodes: [normal],
+          removedNodes: []
+        };
+        const structuralRecord = {
+          ...textRecord,
+          addedNodes: [structural]
+        };
+        return {
+          ok:
+            isManagedContentOnlyMutationBatch([textRecord]) ===
+              settings.lowPowerMode &&
+            !isManagedContentOnlyMutationBatch([structuralRecord])
+        };
+      }
+    );
+
+    test(
       'failure-code-normalization',
       () => ({
         ok:
@@ -6043,12 +6129,10 @@ ${safeMediaCss}
 
       applyMarkerDiff(desired);
       attachPaneResizeObserver();
-      detectDomCapabilities();
-      evaluateCompatibility(
-        runtime.lastCapabilities
-      );
+      const capabilities = detectDomCapabilities(true);
+      evaluateCompatibility(capabilities);
       setRootState();
-      updateDomFingerprint('scan');
+      updateDomFingerprint('scan', capabilities);
       verifyAppliedWidths();
       runtime.scanCount += 1;
 
@@ -6226,7 +6310,9 @@ ${safeMediaCss}
       } else {
         run();
       }
-    }, settings.scanDebounceMs);
+    }, settings.lowPowerMode
+      ? Math.max(settings.scanDebounceMs, CONFIG.lowPowerScanDebounceMs)
+      : settings.scanDebounceMs);
 
     return true;
   }
@@ -6455,7 +6541,7 @@ ${safeMediaCss}
 
   function getAdaptiveWatchdogInterval() {
     if (shouldPauseWork()) {
-      return CONFIG.enforcementStableIntervalMs;
+      return settings.lowPowerMode ? 30000 : CONFIG.enforcementStableIntervalMs;
     }
 
     const now = Date.now();
@@ -6471,18 +6557,18 @@ ${safeMediaCss}
       runtime.enforcementRetryCount > 0 ||
       runtime.safeFallbackActive
     ) {
-      return CONFIG.enforcementUnstableIntervalMs;
+      return settings.lowPowerMode ? 1500 : CONFIG.enforcementUnstableIntervalMs;
     }
 
     if (now - recentActivity < 5000) {
-      return CONFIG.enforcementActiveIntervalMs;
+      return settings.lowPowerMode ? 4500 : CONFIG.enforcementActiveIntervalMs;
     }
 
     if (runtime.stableWatchdogPasses >= 8) {
-      return CONFIG.enforcementStableIntervalMs;
+      return settings.lowPowerMode ? 30000 : CONFIG.enforcementStableIntervalMs;
     }
 
-    return CONFIG.enforcementNormalIntervalMs;
+    return settings.lowPowerMode ? 15000 : CONFIG.enforcementNormalIntervalMs;
   }
 
   function scheduleEnforcementWatchdog(delay = null) {
@@ -6620,7 +6706,9 @@ ${safeMediaCss}
             error
           );
         }
-      }, settings.repairIntervalMs);
+      }, settings.lowPowerMode
+        ? Math.max(settings.repairIntervalMs, CONFIG.lowPowerRepairIntervalMs)
+        : settings.repairIntervalMs);
 
     runtime.routeTimer =
       window.setInterval(() => {
@@ -6636,9 +6724,13 @@ ${safeMediaCss}
         if (!shouldPauseWork()) {
           checkRoute();
         }
-      }, settings.routePollMs);
+      }, settings.lowPowerMode
+        ? Math.max(settings.routePollMs, CONFIG.lowPowerRoutePollMs)
+        : settings.routePollMs);
 
-    scheduleEnforcementWatchdog(CONFIG.enforcementActiveIntervalMs);
+    scheduleEnforcementWatchdog(settings.lowPowerMode
+      ? 4500
+      : CONFIG.enforcementActiveIntervalMs);
   }
 
   function commit(
@@ -6689,6 +6781,9 @@ ${safeMediaCss}
       );
     }
 
+    const previousLowPower =
+      settings.lowPowerMode;
+
     const previousRepair =
       settings.repairIntervalMs;
 
@@ -6704,10 +6799,16 @@ ${safeMediaCss}
     );
 
     const timersChanged =
+      previousLowPower !== settings.lowPowerMode ||
       previousRepair !==
         settings.repairIntervalMs ||
       previousRoute !==
         settings.routePollMs;
+
+    if (previousLowPower !== settings.lowPowerMode) {
+      runtime.lastCapabilitiesAt = 0;
+      runtime.lastSelectorHealthAt = 0;
+    }
 
     commit(
       getStatusText(),
@@ -6753,6 +6854,8 @@ ${safeMediaCss}
 
     runtime.href =
       location.href;
+    runtime.lastCapabilitiesAt = 0;
+    runtime.lastPlanNoticeScanAt = 0;
     runtime.lastRouteChangeAt = Date.now();
     clearSafeFallback('route-change');
     pushDebugEvent('route-change', {
@@ -6974,6 +7077,51 @@ ${safeMediaCss}
     return records.length > CONFIG.maxMutationRecords;
   }
 
+  function isManagedContentOnlyMutationBatch(records) {
+    if (!settings.lowPowerMode || !records?.length) {
+      return false;
+    }
+
+    for (const record of records) {
+      if (record.type !== 'childList' || !isElement(record.target)) {
+        return false;
+      }
+
+      // Text and presentation changes in a managed turn do not affect
+      // which structural nodes need width markers.
+      const turn = record.target.closest(`[${ATTR.turn}]`);
+      if (!turn || record.target.closest(`[${ATTR.planNotice}]`)) {
+        return false;
+      }
+
+      const added = record.addedNodes || [];
+      const removed = record.removedNodes || [];
+      if (
+        added.length > CONFIG.maxMutationNodes ||
+        removed.length > CONFIG.maxMutationNodes
+      ) {
+        return false;
+      }
+
+      for (const node of [...added, ...removed]) {
+        if (nodeMayRequireScan(node)) {
+          return false;
+        }
+      }
+    }
+
+    return true;
+  }
+
+  function mutationMayContainPlanNotice(record) {
+    const candidates = [record.target, ...(record.addedNodes || [])];
+    return candidates.some((node) =>
+      isElement(node) &&
+      node.childElementCount <= 5 &&
+      hasFreePlanNoticeText(node)
+    );
+  }
+
   function classifyMutationDirtyRegions(records) {
     const dirty = new Set();
 
@@ -7030,7 +7178,9 @@ ${safeMediaCss}
 
     for (let index = 0; index < limit; index += 1) {
       const record = records[index];
-      inspectNode(record.target);
+      if (record.type === 'attributes') {
+        inspectNode(record.target);
+      }
 
       if (
         record.type === 'childList' &&
@@ -7038,7 +7188,15 @@ ${safeMediaCss}
       ) {
         try {
           if (record.target.closest(SELECTOR.main)) {
-            dirty.add(DIRTY.notice);
+            if (
+              !settings.lowPowerMode ||
+              Date.now() - runtime.lastPlanNoticeScanAt >=
+                CONFIG.lowPowerNoticeThrottleMs ||
+              record.target.closest(`[${ATTR.planNotice}]`) ||
+              mutationMayContainPlanNotice(record)
+            ) {
+              dirty.add(DIRTY.notice);
+            }
           }
         } catch (_) {}
       }
@@ -7102,6 +7260,12 @@ ${safeMediaCss}
     const relevantRecords = attribution.externalRecords.length > 0
       ? attribution.externalRecords
       : records;
+
+    if (isManagedContentOnlyMutationBatch(relevantRecords)) {
+      runtime.skippedContentMutationBatches += 1;
+      return;
+    }
+
     const dirty = classifyMutationDirtyRegions(relevantRecords);
 
     if (dirty.size > 0) {
@@ -7161,9 +7325,41 @@ ${safeMediaCss}
     }
   }
 
+  function headMutationTouchesOwnedStyle(record) {
+    const check = (node) => {
+      const element = node?.nodeType === 3 ? node.parentElement : node;
+      if (!isElement(element)) return false;
+      if (element.id === ID.style || element.id === ID.uiStyle) return true;
+      try {
+        return Boolean(
+          element.closest(`#${ID.style},#${ID.uiStyle}`) ||
+          element.querySelector(`#${ID.style},#${ID.uiStyle}`)
+        );
+      } catch (_) {
+        return false;
+      }
+    };
+
+    if (check(record.target)) return true;
+    for (const node of record.addedNodes || []) {
+      if (check(node)) return true;
+    }
+    for (const node of record.removedNodes || []) {
+      if (check(node)) return true;
+    }
+    return false;
+  }
+
   function onHeadMutations(records = []) {
     const attribution = attributeMutations(records || []);
     if (attribution.source === 'ultrawide') {
+      return;
+    }
+
+    if (
+      settings.lowPowerMode &&
+      !records.some(headMutationTouchesOwnedStyle)
+    ) {
       return;
     }
 
@@ -7300,6 +7496,7 @@ ${safeMediaCss}
       );
 
       runtime.observedBody = body;
+      runtime.lastCapabilitiesAt = 0;
     }
 
     return Boolean(
@@ -7968,6 +8165,18 @@ ${safeMediaCss}
           'safeMedia',
           'Safe media constraints'
         );
+      }
+    );
+
+    registerMenu(
+      'low-power',
+      menuToggleLabel(
+        'Low-power mode',
+        settings.lowPowerMode,
+        settings.lowPowerMode ? 'optimized' : 'standard'
+      ),
+      () => {
+        toggleSetting('lowPowerMode', 'Low-power mode');
       }
     );
 
@@ -9179,20 +9388,25 @@ ${safeMediaCss}
                                   createNumberInput(
                                     'scanDebounceMs',
                                     'DOM scan debounce',
-                                    'Higher values reduce DOM activity'
+                                    'Low-power minimum: 550 ms'
                                   ),
                                   createNumberInput(
                                     'repairIntervalMs',
                                     'Repair interval',
-                                    'Lightweight integrity check'
+                                    'Low-power minimum: 30 seconds'
                                   ),
                                   createNumberInput(
                                     'routePollMs',
-                                    'SPA route fallback interval'
+                                    'SPA route fallback interval',
+                                    'Low-power minimum: 30 seconds'
                                   ),
                                   createNumberInput(
                                     'toastMs',
                                     'Status-message duration'
+                                  ),
+                                  createCheckbox(
+                                    'lowPowerMode',
+                                    'Low-power mode (fewer background scans)'
                                   ),
                                   createCheckbox(
                                     'pauseWhenHidden',
@@ -10039,6 +10253,22 @@ ${safeMediaCss}
         runtime.lastRouteChangeAt,
       deferredScan:
         runtime.deferredScan,
+      lowPowerMode:
+        settings.lowPowerMode,
+      skippedContentMutationBatches:
+        runtime.skippedContentMutationBatches,
+      effectiveScanDebounceMs:
+        settings.lowPowerMode
+          ? Math.max(settings.scanDebounceMs, CONFIG.lowPowerScanDebounceMs)
+          : settings.scanDebounceMs,
+      effectiveRepairIntervalMs:
+        settings.lowPowerMode
+          ? Math.max(settings.repairIntervalMs, CONFIG.lowPowerRepairIntervalMs)
+          : settings.repairIntervalMs,
+      effectiveRoutePollMs:
+        settings.lowPowerMode
+          ? Math.max(settings.routePollMs, CONFIG.lowPowerRoutePollMs)
+          : settings.routePollMs,
       pauseWhenHidden:
         settings.pauseWhenHidden,
       performanceTelemetry:
@@ -10129,6 +10359,9 @@ ${safeMediaCss}
     runtime.reconcileLockContentionCount = 0;
     runtime.selectorHealth.clear();
     runtime.lastSelectorHealthAt = 0;
+    runtime.lastCapabilitiesAt = 0;
+    runtime.lastPlanNoticeScanAt = 0;
+    runtime.skippedContentMutationBatches = 0;
     runtime.performanceBudgetState.clear();
     pushDebugEvent('runtime-start', {
       href: runtime.href
