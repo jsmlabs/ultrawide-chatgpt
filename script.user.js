@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UltraWide ChatGPT
 // @namespace    https://www.instagram.com/jsm.ig/
-// @version      2026.10.12.1
+// @version      2026.10.12.2
 // @author       jsmdev
 // @description  UltraWide ChatGPT provides a robust ultra-wide layout for current ChatGPT Chat and Work with adaptive width, split-view safety, diagnostics, settings, SPA support, and complete cleanup.
 // @license      MIT
@@ -18,7 +18,7 @@
 
 /*
   UltraWide ChatGPT
-  Version: 2026.10.12.1
+  Version: 2026.10.12.2
 
   Improvements
   - Updated for the current ChatGPT Chat + Work web surface
@@ -108,6 +108,15 @@
   - Retains immediate repair of structural changes, manual checks, and diagnostics
   - Filters irrelevant head mutations to avoid unnecessary style integrity scans
   - Retains immediate detection for small new free-plan notices under throttling
+  - Fixes disabled-state root attributes being resurrected by environment events
+  - Honors the widenComposer toggle for global composer CSS variable overrides
+  - Prevents animation-frame reconciliation spin while a scan is pending
+  - Releases the reconciliation pending lock after a failed scan
+  - Tracks internal mutation intents as consumable records to preserve external edits
+  - Avoids disabled-state false-positive turn-marker invariant failures
+  - Detects external deletion of managed DOM markers and restores them
+  - Invalidation-aware CSS caching for the wide-composer setting
+  - Adds focused regression checks for lifecycle, reconciliation, and mutation contracts
 
   Shortcuts
   - Alt+O  Enable/disable script
@@ -160,7 +169,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '2026.10.12.1';
+  const VERSION = '2026.10.12.2';
   const PRODUCT_NAME = 'UltraWide ChatGPT';
   const STORAGE_KEY = 'uwc.settings.v14';
 
@@ -352,7 +361,8 @@
       'contenteditable',
       'aria-modal',
       'aria-hidden',
-      'hidden'
+      'hidden',
+      ...MANAGED_MARKERS
     ])
   });
 
@@ -552,6 +562,7 @@
     DISCONNECTED_MARKERS: 'DISCONNECTED_MARKERS',
     TURN_MARKERS_MISSING: 'TURN_MARKERS_MISSING',
     COMPOSER_MARKER_MISSING: 'COMPOSER_MARKER_MISSING',
+    MARKER_ATTRIBUTE_DRIFT: 'MARKER_ATTRIBUTE_DRIFT',
     WIDTH_VERIFICATION_FAILED: 'WIDTH_VERIFICATION_FAILED',
     WIDTH_EXCEEDS_PANE: 'WIDTH_EXCEEDS_PANE',
     WIDTH_UNDER_APPLIED: 'WIDTH_UNDER_APPLIED',
@@ -1231,10 +1242,13 @@
       runtime.mutationIntentMap.set(node, intents);
     }
 
-    intents.set(
-      mutationIntentKey(type, attributeName),
-      Date.now() + CONFIG.mutationIntentTtlMs
-    );
+    const key = mutationIntentKey(type, attributeName);
+    const previous = intents.get(key);
+    const now = Date.now();
+    intents.set(key, {
+      expiresAt: now + CONFIG.mutationIntentTtlMs,
+      count: (previous && previous.expiresAt >= now ? previous.count : 0) + 1
+    });
   }
 
   function hasMutationIntent(record) {
@@ -1248,13 +1262,17 @@
       record.type,
       record.type === 'attributes' ? record.attributeName : ''
     );
-    const expiresAt = Number(intents.get(key) || 0);
+    const entry = intents.get(key);
 
-    if (expiresAt < now) {
+    if (!entry || entry.expiresAt < now || entry.count <= 0) {
       intents.delete(key);
       return false;
     }
 
+    // One script-originated operation accounts for one observer record.
+    // Never suppress later external changes on the same node/attribute.
+    entry.count -= 1;
+    if (entry.count === 0) intents.delete(key);
     return true;
   }
 
@@ -1398,11 +1416,22 @@
     }
 
     for (const element of elements) {
-      if (element?.isConnected) {
+      if (element?.isConnected && element.getAttribute(attribute) === '1') {
         return true;
       }
     }
 
+    return false;
+  }
+
+  function hasMarkerAttributeDrift() {
+    for (const [attribute, elements] of runtime.marked) {
+      for (const element of elements) {
+        if (element?.isConnected && element.getAttribute(attribute) !== '1') {
+          return true;
+        }
+      }
+    }
     return false;
   }
 
@@ -2338,6 +2367,7 @@
   )!important;
 }
 
+${settings.widenComposer ? `
 /* Current composer uses the same thread-variable system. Keep the bottom
    container structurally full width and let its inner responsive wrapper use
    the configured UltraWide width. */
@@ -2369,6 +2399,8 @@
   min-width:0!important;
   margin-inline:auto!important;
 }
+
+` : ''}
 
 :root[${ATTR.enabled}="1"][${ATTR.wide}="1"]
 [${ATTR.conversationRoot}="1"],
@@ -3232,7 +3264,8 @@ ${safeMediaCss}
       settings.gutterMin,
       settings.gutterVw,
       settings.gutterMax,
-      settings.safeMedia
+      settings.safeMedia,
+      settings.widenComposer
     ].join('|');
   }
 
@@ -3338,6 +3371,11 @@ ${safeMediaCss}
     const root = getRoot();
 
     if (!root) {
+      return;
+    }
+
+    if (!settings.enabled) {
+      clearRootState();
       return;
     }
 
@@ -3489,7 +3527,7 @@ ${safeMediaCss}
       }
 
       for (const element of next) {
-        if (!previous.has(element)) {
+        if (!previous.has(element) || element.getAttribute(attribute) !== '1') {
           setBooleanAttribute(element, attribute, true);
         }
       }
@@ -4475,6 +4513,7 @@ ${safeMediaCss}
       headObserver: Boolean(runtime.headObserver && runtime.observedHead?.isConnected),
       paneObserver: Boolean(runtime.paneResizeObserver && runtime.observedPane?.isConnected),
       disconnectedMarkers: hasDisconnectedMarkers(),
+      markerAttributeDrift: hasMarkerAttributeDrift(),
       turnMarker: hasConnectedMarker(ATTR.turn),
       composerMarker: hasConnectedMarker(ATTR.composer),
       fingerprint: computeDomFingerprint(),
@@ -4528,6 +4567,11 @@ ${safeMediaCss}
 
     if (actual.disconnectedMarkers) {
       failures.push(FAILURE_CODE.DISCONNECTED_MARKERS);
+      actions.add('markers');
+    }
+
+    if (desired.markers && actual.markerAttributeDrift) {
+      failures.push(FAILURE_CODE.MARKER_ATTRIBUTE_DRIFT);
       actions.add('markers');
     }
 
@@ -4600,7 +4644,8 @@ ${safeMediaCss}
       set.has(FAILURE_CODE.WIDTH_UNDER_APPLIED) ||
       set.has(FAILURE_CODE.TURN_MARKERS_MISSING) ||
       set.has(FAILURE_CODE.COMPOSER_MARKER_MISSING) ||
-      set.has(FAILURE_CODE.DISCONNECTED_MARKERS)
+      set.has(FAILURE_CODE.DISCONNECTED_MARKERS) ||
+      set.has(FAILURE_CODE.MARKER_ATTRIBUTE_DRIFT)
     ) return 3;
     if (
       set.has(FAILURE_CODE.MAIN_STYLE_INTEGRITY) ||
@@ -4955,6 +5000,8 @@ ${safeMediaCss}
   function scheduleQueuedReconciliation() {
     if (
       !runtime.started ||
+      runtime.reconcileInProgress ||
+      runtime.reconcilePendingVerification ||
       runtime.queuedReconciliationFrame ||
       runtime.queuedReconciliationReasons.size === 0
     ) {
@@ -5727,6 +5774,108 @@ ${safeMediaCss}
       }
     );
 
+    test(
+      'initial-layout-contract',
+      () => ({
+        ok:
+          runtime.started &&
+          (!settings.enabled ||
+            runtime.scanCount > 0 ||
+            Boolean(runtime.animationFrame) ||
+            Boolean(runtime.scanTimer) ||
+            Boolean(runtime.idleCallback))
+      })
+    );
+
+    test(
+      'marker-drift-recovery',
+      () => {
+        const previous = runtime.marked.get(ATTR.turn);
+        const stub = {
+          isConnected: true,
+          value: null,
+          getAttribute() { return this.value; },
+          hasAttribute() { return this.value !== null; },
+          setAttribute(_, value) { this.value = String(value); },
+          removeAttribute() { this.value = null; }
+        };
+        try {
+          runtime.marked.set(ATTR.turn, new Set([stub]));
+          const detected = hasMarkerAttributeDrift() && !hasConnectedMarker(ATTR.turn);
+          const desired = createDesiredMarkers();
+          for (const [attribute, elements] of runtime.marked) {
+            desired.set(attribute, new Set(elements));
+          }
+          applyMarkerDiff(desired);
+          return { ok: detected && hasConnectedMarker(ATTR.turn) && !hasMarkerAttributeDrift() };
+        } finally {
+          runtime.marked.set(ATTR.turn, previous);
+        }
+      }
+    );
+
+    test(
+      'composer-css-toggle',
+      () => {
+        const previous = settings.widenComposer;
+        const needle = '#thread-bottom-container{\n  --thread-content-responsive-max-width';
+        try {
+          settings.widenComposer = true;
+          const enabledCss = buildMainCss();
+          settings.widenComposer = false;
+          const disabledCss = buildMainCss();
+          return { ok: enabledCss.includes(needle) && !disabledCss.includes(needle) };
+        } finally {
+          settings.widenComposer = previous;
+        }
+      }
+    );
+
+    test(
+      'mutation-intent-consumption',
+      () => {
+        const element = document.createElement('div');
+        const record = {
+          target: element,
+          type: 'attributes',
+          attributeName: 'data-uwc-test'
+        };
+        markMutationIntent(element, 'attributes', record.attributeName);
+        return {
+          ok: hasMutationIntent(record) && !hasMutationIntent(record)
+        };
+      }
+    );
+
+    test(
+      'disabled-root-contract',
+      () => {
+        if (settings.enabled) return { ok: true, skipped: true };
+        setRootState();
+        return { ok: rootStateMatches() };
+      }
+    );
+
+    test(
+      'reconciliation-pending-queue-contract',
+      () => {
+        const oldPending = runtime.reconcilePendingVerification;
+        const oldFrame = runtime.queuedReconciliationFrame;
+        const oldReasons = new Set(runtime.queuedReconciliationReasons);
+        try {
+          runtime.reconcilePendingVerification = true;
+          runtime.queuedReconciliationFrame = 0;
+          runtime.queuedReconciliationReasons.add('contract-test');
+          return { ok: scheduleQueuedReconciliation() === false };
+        } finally {
+          runtime.reconcilePendingVerification = oldPending;
+          runtime.queuedReconciliationFrame = oldFrame;
+          runtime.queuedReconciliationReasons.clear();
+          oldReasons.forEach((value) => runtime.queuedReconciliationReasons.add(value));
+        }
+      }
+    );
+
     const durationMs =
       Math.max(
         0,
@@ -5786,7 +5935,12 @@ ${safeMediaCss}
       failures.push(FAILURE_CODE.DISCONNECTED_MARKERS);
     }
 
+    if (settings.enabled && hasMarkerAttributeDrift()) {
+      failures.push(FAILURE_CODE.MARKER_ATTRIBUTE_DRIFT);
+    }
+
     if (
+      settings.enabled &&
       runtime.lastTurnCount > 0 &&
       !hasConnectedMarker(ATTR.turn)
     ) {
@@ -6154,6 +6308,9 @@ ${safeMediaCss}
 
       syncDebugOverlay();
     } catch (error) {
+      // A failed asynchronous scan cannot leave reconciliation locked.
+      runtime.reconcilePendingVerification = false;
+      runtime.reconcilePendingSince = 0;
       runtime.lastError = String(
         error?.message || error
       );
@@ -7179,6 +7336,14 @@ ${safeMediaCss}
     for (let index = 0; index < limit; index += 1) {
       const record = records[index];
       if (record.type === 'attributes') {
+        // React and other extensions may remove an existing managed marker.
+        // Schedule the relevant region even after the selector stops matching.
+        if ([ATTR.conversationRoot, ATTR.conversationPath, ATTR.turn, ATTR.turnPath]
+          .includes(record.attributeName)) dirty.add(DIRTY.conversation);
+        if ([ATTR.composer, ATTR.composerPath]
+          .includes(record.attributeName)) dirty.add(DIRTY.composer);
+        if ([ATTR.planNotice, ATTR.planNoticePath]
+          .includes(record.attributeName)) dirty.add(DIRTY.notice);
         inspectNode(record.target);
       }
 
@@ -9845,6 +10010,8 @@ ${safeMediaCss}
         runtime.observedPane.isConnected,
       markersConnected:
         !hasDisconnectedMarkers(),
+      markersIntact:
+        !hasMarkerAttributeDrift(),
       rootEnabledState:
         !settings.enabled ||
         root?.getAttribute(ATTR.enabled) === '1',
