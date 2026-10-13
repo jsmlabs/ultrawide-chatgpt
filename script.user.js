@@ -4,7 +4,7 @@
 // @version      2026.10.13.1
 // @author       jsmdev
 // @description  UltraWide ChatGPT provides a robust ultra-wide layout for current ChatGPT Chat and Work with adaptive width, split-view safety, diagnostics, settings, SPA support, and complete cleanup.
-// @license      MIT
+// @license      JSM-Custom-1.1
 // @match        https://chatgpt.com/*
 // @match        https://www.chatgpt.com/*
 // @icon         https://cdn.jsdelivr.net/gh/simple-icons/simple-icons/icons/openai.svg
