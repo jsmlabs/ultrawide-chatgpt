@@ -1,30 +1,37 @@
 <div align="center">
 
-# UltraWide ChatGPT
+# 🖥️ UltraWide ChatGPT
 
-**A wider, adaptive ChatGPT workspace - without giving up responsive layouts or runtime control.**
+### A wider workspace. A cleaner conversation.
 
-A configurable Tampermonkey userscript for ChatGPT Chat and Work. Expands conversation content, optionally widens the message composer, adapts to the available chat pane, and includes layout recovery, diagnostics, and low-power operation.
+**Adaptive conversation width · Pane-aware layouts · Runtime controls**
 
-![Version](https://img.shields.io/badge/version-2026.10.12.2-2563eb?style=flat-square)
-![Type](https://img.shields.io/badge/type-userscript-334155?style=flat-square)
-![License](https://img.shields.io/badge/license-MIT-334155?style=flat-square)
-![Validation](https://img.shields.io/badge/simulated_regressions-20%2F20_passing-15803d?style=flat-square)
+A configurable Tampermonkey userscript for ChatGPT Chat and Work. Widen conversations, optionally expand the composer, and retain responsive layout recovery, diagnostics, and low-power operation.
 
-[Installation](#installation) · [Features](#features) · [Configuration](#configuration) · [Shortcuts](#keyboard-shortcuts) · [Diagnostics](#diagnostics-and-console-api) · [Troubleshooting](#troubleshooting)
+[![Version](https://img.shields.io/badge/version-2026.10.13.1-2563eb?style=flat-square)](script.user.js)
+[![Type](https://img.shields.io/badge/type-Tampermonkey%20userscript-475569?style=flat-square)](script.user.js)
+[![License file](https://img.shields.io/badge/license-JSM%20Custom%20v1.0-64748b?style=flat-square)](LICENSE)
+![Browser validation](https://img.shields.io/badge/live%20browser-unverified-c47f17?style=flat-square)
+
+**[⬇️ Install](#installation)** · **[✨ Features](#features)** · **[⚙️ Configure](#configuration)** · **[⌨️ Shortcuts](#keyboard-shortcuts)** · **[🩺 Diagnostics](#diagnostics-and-console-api)** · **[🧪 Verification](#testing-and-verification)**
 
 </div>
 
+---
+
 > [!IMPORTANT]
-> **Compatibility status:** Version `2026.10.12.2` passed JavaScript syntax validation and 20 built-in regression tests in a simulated DOM. Real ChatGPT browser compatibility, split-view behavior, and end-to-end performance have **not** been verified by those tests. ChatGPT's internal layout can change without notice.
+> **Compatibility status:** The current userscript is version `2026.10.13.1`. The 20-pass synthetic-DOM test result documented below refers to the earlier `2026.10.12.2` source; it must **not** be treated as validation of the current version. Live ChatGPT browser compatibility, split-view behavior, and performance remain unverified here. ChatGPT's internal layout can change without notice.
 
 ## Overview
+
+> **Quick orientation:** [Install](#installation) → [Configure](#configuration) → [Verify](#testing-and-verification) → [Troubleshoot](#troubleshooting). The current script is [`script.user.js`](script.user.js); performance and compatibility must be checked on your browser.
+
 
 ChatGPT's default reading width can leave substantial unused space on large displays. UltraWide ChatGPT changes the layout of the active conversation while trying to preserve the boundaries of the chat pane and avoid unrelated editors or dialogs.
 
 The script runs locally in the browser, uses semantic DOM markers and ChatGPT thread-width CSS variables where available, and re-evaluates the layout after navigation, remounts, and relevant DOM changes. It is a **layout customization**, not an alternative ChatGPT client.
 
-### At a glance
+### ✨ At a glance
 
 | Area | Behavior |
 | --- | --- |
@@ -39,6 +46,8 @@ The script runs locally in the browser, uses semantic DOM markers and ChatGPT th
 | Controls | Settings dialog, Tampermonkey menu, eight shortcuts, and a console API |
 | Diagnostics | Runtime health, selector coverage, width verification, repair history, exportable reports |
 
+---
+
 ## Installation
 
 ### Requirements
@@ -49,16 +58,16 @@ The script runs locally in the browser, uses semantic DOM markers and ChatGPT th
 
 ### Install from GitHub
 
-1. Open **[`UltraWide_ChatGPT_2026.10.12.2_Optimized.user.js`](./UltraWide_ChatGPT_2026.10.12.2_Optimized.user.js)** in this repository.
+1. Open the current **[`script.user.js`](./script.user.js)** in this repository.
 2. Select **Raw** to open the actual `.user.js` file. If Tampermonkey offers to install it, review the permissions and confirm.
 3. If no installation prompt appears, create a new userscript in Tampermonkey and paste the complete `.user.js` source, preserving its metadata header.
 4. Open or refresh [ChatGPT](https://chatgpt.com/) and check the Tampermonkey menu for **UltraWide ChatGPT**.
 5. Press **`Alt+S`** (outside the message editor) to open settings.
 
-**Alternative:** The identical source is also distributed as [`UltraWide_ChatGPT_2026.10.12.2_Optimized.txt`](./UltraWide_ChatGPT_2026.10.12.2_Optimized.txt) for manual inspection or copying. Install the `.user.js` version whenever possible.
+**Manual alternative:** Open [`script.user.js`](./script.user.js), copy its full contents into a new Tampermonkey userscript, and preserve the metadata header.
 
 > [!NOTE]
-> The links above refer to files at the repository root. If you rename or relocate the userscript, update these README links accordingly. No repository-specific raw URL is hard-coded.
+> The installation link refers to the verified root-level `script.user.js`. Review the script and its permissions before installing.
 
 ### Update an existing installation
 
@@ -118,6 +127,8 @@ The script does not promise uninterrupted compatibility with every ChatGPT updat
 **Enabled by default.** Low-power mode reduces background work by coalescing structural scans, avoiding ordinary streaming-content rescans, caching short-lived capability checks, and throttling nonessential notice detection.
 
 Under default settings, the effective minimum scan debounce is `550ms`, and the background repair and route-fallback intervals are each at least `30s`. Structural changes may still trigger more immediate work. The watchdog uses a separate adaptive schedule.
+
+---
 
 ## Configuration
 
@@ -211,6 +222,8 @@ Shortcuts are handled when focus is **outside** a text input, contenteditable ed
 
 The Tampermonkey menu also provides quick toggles, rescan, diagnostics export, bug-report export, and reset actions.
 
+---
+
 ## Diagnostics and console API
 
 The userscript exposes a local API at **`window.__mlUltraWide`**. Open the browser developer console on a ChatGPT page where the userscript is running.
@@ -287,9 +300,11 @@ uwc.repair();
 uwc.selfTest();
 ```
 
+---
+
 ## Testing and verification
 
-Version `2026.10.12.2` was checked against the provided source and local regression harness.
+**Historical validation record:** The documented synthetic test results apply to version `2026.10.12.2`, not the current `2026.10.13.1` script. No equivalent current-version test outcome is asserted here.
 
 | Validation | Result | Scope |
 | --- | --- | --- |
@@ -306,11 +321,10 @@ Version `2026.10.12.2` was checked against the provided source and local regress
 
 ### Reproduce the available tests
 
-From a directory containing the userscript and the bundled Node.js test runner:
+For the current script, JavaScript syntax can be checked locally with Node.js:
 
 ```bash
-node --check UltraWide_ChatGPT_2026.10.12.2_Optimized.user.js
-node UltraWide_ChatGPT_Regression_Test.cjs UltraWide_ChatGPT_2026.10.12.2_Optimized.user.js
+node --check script.user.js
 ```
 
 Run the built-in checks on an actual ChatGPT page:
@@ -321,7 +335,7 @@ window.__mlUltraWide.selfTest();
 window.__mlUltraWide.verify();
 ```
 
-**The Node.js harness uses a mocked DOM** and cannot establish real browser layout accuracy, performance, or compatibility. Read the [validation report](./UltraWide_ChatGPT_Validation_Report.md) for the exact tested scope and remaining limitations.
+**Historical test limitation:** The earlier 20-test result used a mocked DOM and cannot establish real browser layout accuracy, performance, or current-version compatibility. The previously referenced regression runner and validation report are not present at their documented root paths.
 
 ### Suggested live acceptance checks
 
@@ -335,6 +349,8 @@ Before treating a new ChatGPT DOM revision as compatible, verify:
 6. Disabling the script removes managed layout CSS and markers; re-enabling restores them.
 7. Navigation, resizes, hidden-tab transitions, and repeated reinjection do not create duplicate styles or unnecessary loops.
 8. Runtime diagnostics show no recurring errors, and interaction remains responsive on the target device.
+
+---
 
 ## Design and implementation
 
@@ -384,17 +400,21 @@ Install userscripts only from a source you trust, review changes before updates,
 - Width behavior may vary by browser, zoom level, platform, ChatGPT experiment, or UI variant.
 - The currently supplied validation evidence is **synthetic**, not a completed live-browser acceptance test.
 
+---
+
 ## Project files
 
 | File | Purpose |
 | --- | --- |
-| [`UltraWide_ChatGPT_2026.10.12.2_Optimized.user.js`](./UltraWide_ChatGPT_2026.10.12.2_Optimized.user.js) | Installable Tampermonkey userscript |
-| [`UltraWide_ChatGPT_2026.10.12.2_Optimized.txt`](./UltraWide_ChatGPT_2026.10.12.2_Optimized.txt) | Identical source as plain text |
-| [`UltraWide_ChatGPT_Regression_Test.cjs`](./UltraWide_ChatGPT_Regression_Test.cjs) | Local synthetic-DOM regression runner |
-| [`UltraWide_ChatGPT_Validation_Report.md`](./UltraWide_ChatGPT_Validation_Report.md) | Verification results and scope limitations |
+| [`script.user.js`](./script.user.js) | Current installable Tampermonkey userscript (`2026.10.13.1`) |
+| [`LICENSE`](./LICENSE) | JSM Custom License v1.0; differs from the script metadata's `MIT` declaration |
 | `README.md` | Installation, usage, reference, and maintenance documentation |
 
 ## Release notes
+
+### `2026.10.13.1` - current script
+
+The repository currently ships `script.user.js` at this version. Its source header documents Chat/Work compatibility adaptations, lifecycle recovery and diagnostics improvements; these are implementation descriptions, not independently verified browser results.
 
 ### `2026.10.12.2` - reliability and lifecycle fixes
 
@@ -407,7 +427,7 @@ Install userscripts only from a source you trust, review changes before updates,
 - Removed false-positive turn-marker invariant failures while disabled.
 - Extended the built-in regression suite to **20 tests**.
 
-For the detailed verification record, see the [validation report](./UltraWide_ChatGPT_Validation_Report.md).
+The historical validation-report file referenced by the prior README is not available at that path in the current repository.
 
 ## Contributing and support
 
@@ -415,8 +435,20 @@ Reproducible bug reports and narrowly scoped compatibility fixes are welcome whe
 
 For proposed fixes, preserve existing settings names and user-facing shortcuts where possible, keep observer work bounded, and test both **enabled** and **disabled** lifecycle paths. Validate changes in a real browser before claiming ChatGPT compatibility.
 
+---
+
 ## License and attribution
 
-**MIT** - as declared in the userscript metadata. Include an MIT `LICENSE` file in the GitHub repository for complete license terms.
+**License discrepancy:** The repository's [`LICENSE`](LICENSE) contains **JSM Custom License v1.0**, including a restriction on standalone resale, while the current userscript metadata declares `@license MIT`. These are not equivalent. Review both before reuse or redistribution; the license declarations require reconciliation by the repository owner. This README does not amend either license.
 
 Created by **jsmdev**. This is an independent userscript and is **not affiliated with, endorsed by, or maintained by OpenAI**. ChatGPT is a trademark of its respective owner.
+
+<div align="center">
+
+---
+
+**More room for the conversation. More control over the layout.**
+
+[Back to top](#-ultrawide-chatgpt) · [Install](#installation) · [Configuration](#configuration) · [Diagnostics](#diagnostics-and-console-api) · [Source](script.user.js)
+
+</div>
