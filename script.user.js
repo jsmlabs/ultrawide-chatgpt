@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UltraWide ChatGPT
 // @namespace    https://www.instagram.com/jsm.ig/
-// @version      2026.10.12.2
+// @version      2026.10.13.1
 // @author       jsmdev
 // @description  UltraWide ChatGPT provides a robust ultra-wide layout for current ChatGPT Chat and Work with adaptive width, split-view safety, diagnostics, settings, SPA support, and complete cleanup.
 // @license      MIT
@@ -18,7 +18,7 @@
 
 /*
   UltraWide ChatGPT
-  Version: 2026.10.12.2
+  Version: 2026.10.13.1
 
   Improvements
   - Updated for the current ChatGPT Chat + Work web surface
@@ -117,6 +117,11 @@
   - Detects external deletion of managed DOM markers and restores them
   - Invalidation-aware CSS caching for the wide-composer setting
   - Adds focused regression checks for lifecycle, reconciliation, and mutation contracts
+  - Fixes adaptive pane measurement when transcript roots are narrower than their chat pane
+  - Preserves primary composer inputs when unrelated forms exceed the candidate limit
+  - Renders the debug overlay without innerHTML for Trusted Types compatibility
+  - Restores immediate observer initialization at document-start before root creation
+  - Avoids reloading away unsaved settings when persistent storage fails
 
   Shortcuts
   - Alt+O  Enable/disable script
@@ -169,7 +174,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '2026.10.12.2';
+  const VERSION = '2026.10.13.1';
   const PRODUCT_NAME = 'UltraWide ChatGPT';
   const STORAGE_KEY = 'uwc.settings.v14';
 
@@ -1816,9 +1821,11 @@
         continue;
       }
 
+      // Prefer the actual pane: semantic transcript roots may be much narrower
+      // than their containing main and must not determine adaptive activation.
       const main =
-        nearestMain(anchor) ||
         anchor.closest?.('main,[role="main"]') ||
+        nearestMain(anchor) ||
         null;
 
       if (getVisibleRect(main)) {
@@ -3872,13 +3879,19 @@ ${safeMediaCss}
     let candidates = [];
 
     try {
-      candidates = Array.from(
+      const recent = Array.from(
         document.querySelectorAll(
           SELECTOR.composerInput
         )
-      )
-        .filter(isConnectedElement)
-        .slice(-CONFIG.maxComposerCandidates);
+      ).slice(-CONFIG.maxComposerCandidates);
+
+      // A large number of unrelated forms must not push the real composer
+      // out of the bounded candidate set before its priority is evaluated.
+      const primary = Array.from(document.querySelectorAll(
+        '#prompt-textarea,[data-testid="prompt-textarea"],[data-testid="composer-input"],[data-testid="composer:input"]'
+      ));
+      candidates = Array.from(new Set([...primary, ...recent]))
+        .filter(isConnectedElement);
     } catch (_) {}
 
     if (candidates.length === 0) {
@@ -6615,7 +6628,7 @@ ${safeMediaCss}
       evaluateCompatibility();
 
     const rows = [
-      `<strong>UltraWide ${VERSION}</strong>`,
+      `UltraWide ${VERSION}`,
       `wide=${isWideActive() ? 'active' : 'inactive'} cap=${settings.cap}`,
       `pane=${getAdaptiveWidth()}x${runtime.effectivePaneHeight || 0}`,
       `turns=${runtime.lastTurnCount}/${runtime.lastRawTurnCount}`,
@@ -6624,8 +6637,21 @@ ${safeMediaCss}
       `safe=${runtime.safeFallbackActive ? runtime.safeFallbackReason || 'active' : 'off'}`
     ];
 
-    overlay.innerHTML =
-      rows.join('<br>');
+    // Text-only DOM updates work under Trusted Types enforcement and avoid
+    // parsing runtime diagnostics as HTML.
+    const fragment = document.createDocumentFragment();
+    rows.forEach((value, index) => {
+      const line = document.createElement('div');
+      if (index === 0) {
+        const title = document.createElement('strong');
+        title.textContent = value;
+        line.appendChild(title);
+      } else {
+        line.textContent = value;
+      }
+      fragment.appendChild(line);
+    });
+    overlay.replaceChildren(fragment);
   }
 
   function downloadTextFile(filename, content, mimeType = 'text/plain') {
@@ -8085,6 +8111,19 @@ ${safeMediaCss}
         signal
       }
     );
+
+    // At document-start, html/head/body may not exist yet. The initial
+    // observer bootstrap cannot observe a missing document root.
+    if (document.readyState === 'loading') {
+      document.addEventListener(
+        'DOMContentLoaded',
+        guardRuntimeEpoch(() => {
+          installObservers();
+          applyStyles();
+        }, 'dom-ready'),
+        { once: true, signal }
+      );
+    }
   }
 
   function unbindEvents() {
@@ -9162,12 +9201,10 @@ ${safeMediaCss}
 
     if (
       reloadIfChanged &&
-      settingsChanged
+      settingsChanged &&
+      runtime.storageAvailable &&
+      requestGuardedReload('settings-changed')
     ) {
-      requestGuardedReload(
-        'settings-changed'
-      );
-
       return;
     }
 
