@@ -1,6 +1,20 @@
-JSM Custom License v1.0
+JSM Custom License v1.1
 
 Copyright (c) 2026 JSM
+
+This is a custom, source-available license, not the MIT License or an
+Open Source Initiative-approved open-source license. Read all conditions
+before using, modifying, or redistributing the Software.
+
+Scope and interpretation
+
+"Software" means the covered code and accompanying documentation distributed
+with this license, excluding third-party materials governed by separate terms.
+"Standalone product" means an offering in which the Software itself, rather
+than distinct added functionality or services, provides the primary value.
+A change of name, packaging, styling, delivery method, or minor functionality
+alone does not make an otherwise substantially unchanged copy a broader product.
+
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to use,
@@ -9,8 +23,8 @@ the following terms and conditions:
 
 1. Attribution
 
-   The original copyright notice, this license, and appropriate attribution
-   to the original author must be retained in all copies, substantial portions,
+   The original copyright notice, this license text, and appropriate attribution
+   to the original author must be retained in copies, substantial portions,
    forks, and redistributed versions of the Software.
 
    Attribution may not be removed, obscured, falsified, or presented in a
@@ -20,9 +34,9 @@ the following terms and conditions:
 
    Modification of the Software is permitted.
 
-   Any redistributed modified version must clearly indicate that modifications
-   have been made and must not be represented as the original unmodified
-   Software.
+   Redistributed modified versions must reasonably identify that modifications
+   were made and must not be represented as the original unmodified Software.
+   A changelog, accompanying notice, or prominent distribution note suffices.
 
 3. Redistribution
 
@@ -47,7 +61,7 @@ the following terms and conditions:
 
    The Software, or any substantially unchanged, trivially modified,
    repackaged, or primarily rebranded version of it, may not be sold,
-   sublicensed for a fee, or otherwise commercially distributed as a
+   sublicensed for a fee, or otherwise commercially distributed for a fee as a
    standalone product where the primary commercial value is the Software
    itself.
 
@@ -152,3 +166,14 @@ the following terms and conditions:
 
    Additional permissions, exceptions, commercial arrangements, or alternative
    licensing terms may be granted separately in writing.
+
+17. Version and Previously Granted Rights
+
+   This document is JSM Custom License v1.1. This version does not purport to
+   revoke any permission already validly granted under a different license
+   for a copy previously obtained under those terms. Recipients should retain
+   the license terms accompanying the particular copy they received.
+
+   No one other than an authorized rights holder may replace or waive this
+   license for rights they do not own. When a distribution contains third-party
+   material, its separate terms continue to apply.
