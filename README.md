@@ -10,7 +10,7 @@ A configurable Tampermonkey userscript for ChatGPT Chat and Work. Widen conversa
 
 [![Version](https://img.shields.io/badge/version-2026.10.13.1-2563eb?style=flat-square)](script.user.js)
 [![Type](https://img.shields.io/badge/type-Tampermonkey%20userscript-475569?style=flat-square)](script.user.js)
-[![License file](https://img.shields.io/badge/license-JSM%20Custom%20v1.0-64748b?style=flat-square)](LICENSE)
+[![License file](https://img.shields.io/badge/license-JSM%20Custom%20v1.1-64748b?style=flat-square)](LICENSE)
 ![Browser validation](https://img.shields.io/badge/live%20browser-unverified-c47f17?style=flat-square)
 
 **[⬇️ Install](#installation)** · **[✨ Features](#features)** · **[⚙️ Configure](#configuration)** · **[⌨️ Shortcuts](#keyboard-shortcuts)** · **[🩺 Diagnostics](#diagnostics-and-console-api)** · **[🧪 Verification](#testing-and-verification)**
@@ -407,7 +407,7 @@ Install userscripts only from a source you trust, review changes before updates,
 | File | Purpose |
 | --- | --- |
 | [`script.user.js`](./script.user.js) | Current installable Tampermonkey userscript (`2026.10.13.1`) |
-| [`LICENSE`](./LICENSE) | JSM Custom License v1.0; differs from the script metadata's `MIT` declaration |
+| [`LICENSE`](./LICENSE) | JSM Custom License v1.1; consistent with the script metadata |
 | `README.md` | Installation, usage, reference, and maintenance documentation |
 
 ## Release notes
@@ -439,7 +439,7 @@ For proposed fixes, preserve existing settings names and user-facing shortcuts w
 
 ## License and attribution
 
-**License discrepancy:** The repository's [`LICENSE`](LICENSE) contains **JSM Custom License v1.0**, including a restriction on standalone resale, while the current userscript metadata declares `@license MIT`. These are not equivalent. Review both before reuse or redistribution; the license declarations require reconciliation by the repository owner. This README does not amend either license.
+**License:** The repository's [`LICENSE`](LICENSE) provides **JSM Custom License v1.1**, allowing use, modification, and commercial integration subject to attribution and a restriction on standalone resale of substantially unchanged copies. The userscript metadata identifies `JSM-Custom-1.1`. This is a custom license, not MIT or an OSI-approved open-source license. Prior permissions validly granted under different terms are not automatically revoked.
 
 Created by **jsmdev**. This is an independent userscript and is **not affiliated with, endorsed by, or maintained by OpenAI**. ChatGPT is a trademark of its respective owner.
 
