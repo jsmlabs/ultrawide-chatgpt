@@ -2,332 +2,184 @@
 
 # 🖥️ UltraWide ChatGPT
 
-### A wider workspace. A cleaner conversation.
+**More room to read. More control over your workspace.**
 
-**Adaptive conversation width · Pane-aware layouts · Runtime controls**
+A responsive, configurable **Tampermonkey userscript** that widens ChatGPT conversations and optionally the message composer - without replacing the ChatGPT interface.
 
-A configurable Tampermonkey userscript for ChatGPT Chat and Work. Widen conversations, optionally expand the composer, and retain responsive layout recovery, diagnostics, and low-power operation.
+[![Version](https://img.shields.io/badge/version-2026.10.13.1-2563eb?style=flat-square)](./script.user.js)
+[![Userscript](https://img.shields.io/badge/platform-Tampermonkey-0f766e?style=flat-square)](https://www.tampermonkey.net/)
+[![ChatGPT](https://img.shields.io/badge/target-ChatGPT%20Chat%20%26%20Work-334155?style=flat-square)](https://chatgpt.com/)
+[![License](https://img.shields.io/badge/license-JSM%20Custom%20v1.1-64748b?style=flat-square)](./LICENSE)
 
-[![Version](https://img.shields.io/badge/version-2026.10.13.1-2563eb?style=flat-square)](script.user.js)
-[![Type](https://img.shields.io/badge/type-Tampermonkey%20userscript-475569?style=flat-square)](script.user.js)
-[![License file](https://img.shields.io/badge/license-JSM%20Custom%20v1.1-64748b?style=flat-square)](LICENSE)
-![Browser validation](https://img.shields.io/badge/live%20browser-unverified-c47f17?style=flat-square)
-
-**[⬇️ Install](#installation)** · **[✨ Features](#features)** · **[⚙️ Configure](#configuration)** · **[⌨️ Shortcuts](#keyboard-shortcuts)** · **[🩺 Diagnostics](#diagnostics-and-console-api)** · **[🧪 Verification](#testing-and-verification)**
+[**Install userscript**](https://raw.githubusercontent.com/jsmlabs/ultrawide-chatgpt/master/script.user.js) · [Features](#-features) · [Settings](#-configuration) · [Troubleshooting](#-troubleshooting) · [Source](./script.user.js)
 
 </div>
 
 ---
 
 > [!IMPORTANT]
-> **Compatibility status:** The current userscript is version `2026.10.13.1`. The 20-pass synthetic-DOM test result documented below refers to the earlier `2026.10.12.2` source; it must **not** be treated as validation of the current version. Live ChatGPT browser compatibility, split-view behavior, and performance remain unverified here. ChatGPT's internal layout can change without notice.
+> **Compatibility:** The source version is `2026.10.13.1`. Current live-browser compatibility with ChatGPT Chat, Work, and split view has **not been independently verified**. ChatGPT's DOM changes over time. See [verification](#-verification-and-limitations) before relying on this customization.
 
-## Overview
+## ✨ Features
 
-> **Quick orientation:** [Install](#installation) → [Configure](#configuration) → [Verify](#testing-and-verification) → [Troubleshoot](#troubleshooting). The current script is [`script.user.js`](script.user.js); performance and compatibility must be checked on your browser.
+| | Capability | What it does |
+| :--: | --- | --- |
+| ↔️ | **Wider conversations** | Expands conversation width, with optional caps from 1,200 to 4,200 px or no fixed cap. |
+| 📐 | **Adaptive sizing** | Checks the effective chat-pane width instead of relying only on the viewport. |
+| ⌨️ | **Optional wide composer** | Controls composer width separately from conversation width. |
+| 🪟 | **Split-view awareness** | Applies a safety-oriented layout when supported editor or artifact panels are detected. |
+| 🖼️ | **Safer content overflow** | Optionally constrains media, tables, and code blocks within the available space. |
+| 🔄 | **SPA recovery** | Rechecks layout after navigation, relevant DOM remounts, and pane resizing. |
+| 🌙 | **Low-power operation** | Coalesces work, reduces routine polling, and pauses selected background work in hidden tabs. |
+| 🩺 | **Runtime diagnostics** | Exposes integrity checks, health reports, repair actions, and diagnostics exports. |
 
+**Designed for large monitors, but pane-aware:** Adaptive widening is enabled by default and requires an effective chat-pane width of at least **1,100 px**. The default horizontal gutter stays between 16 and 36 px. Smaller or constrained panes can retain the native layout.
 
-ChatGPT's default reading width can leave substantial unused space on large displays. UltraWide ChatGPT changes the layout of the active conversation while trying to preserve the boundaries of the chat pane and avoid unrelated editors or dialogs.
+## 🚀 Installation
 
-The script runs locally in the browser, uses semantic DOM markers and ChatGPT thread-width CSS variables where available, and re-evaluates the layout after navigation, remounts, and relevant DOM changes. It is a **layout customization**, not an alternative ChatGPT client.
+**Requirements:** A modern browser, [Tampermonkey](https://www.tampermonkey.net/) with the declared `GM_*` APIs enabled, and access to [ChatGPT](https://chatgpt.com/).
 
-### ✨ At a glance
+1. **[Open the installable userscript](https://raw.githubusercontent.com/jsmlabs/ultrawide-chatgpt/master/script.user.js)**. Review the source and permissions, then approve the Tampermonkey installation prompt.
+2. If your browser does not offer installation, open [`script.user.js`](./script.user.js), copy its complete contents, and create a new userscript in Tampermonkey. Preserve the `// ==UserScript==` metadata block.
+3. Open or refresh **[chatgpt.com](https://chatgpt.com/)**.
+4. Use the Tampermonkey **UltraWide ChatGPT** menu, or press **`Alt+S`** with focus outside the message editor, to open settings.
 
-| Area | Behavior |
-| --- | --- |
-| Conversation | Wider assistant/user turns, with support for virtualized transcripts |
-| Message composer | Optional width expansion; disabled independently of conversation width |
-| Responsive sizing | Uses the effective chat-pane width when available, not just the browser viewport |
-| Split view | Detects visible artifact/editor panels and applies a safety-oriented layout |
-| Content overflow | Optional constraints for images, video, iframes, code blocks, and tables |
-| Navigation | Tracks single-page application (SPA) navigation and structural remounts |
-| Reliability | Observers, integrity checks, bounded repair attempts, and safe fallback |
-| Performance | Low-power mode, coalesced scans, selective mutation processing, hidden-tab pause |
-| Controls | Settings dialog, Tampermonkey menu, eight shortcuts, and a console API |
-| Diagnostics | Runtime health, selector coverage, width verification, repair history, exportable reports |
+> [!TIP]
+> Updating? Replace the existing installation rather than running two enabled copies. The current storage key is `uwc.settings.v14`; migration logic supports earlier settings keys. Refresh ChatGPT after updating.
 
----
+**Disable or remove:** Press `Alt+O` to toggle layout behavior, disable the script in Tampermonkey, or uninstall it through your userscript manager. Uninstalling may not clear retained settings automatically.
 
-## Installation
+## 🎛️ Configuration
 
-### Requirements
+Open **Settings** with `Alt+S` or the Tampermonkey menu. Defaults are documented below; advanced intervals may be adjusted automatically in low-power mode.
 
-- A modern browser with a userscript manager supporting the declared Tampermonkey-compatible `GM_*` APIs.
-- [Tampermonkey](https://www.tampermonkey.net/) installed and enabled.
-- Access to `https://chatgpt.com/` or `https://www.chatgpt.com/`.
+| Setting | Default | Purpose |
+| --- | :---: | --- |
+| `enabled` / `wide` | `true` / `true` | Master layout and widening switches |
+| `left` | `true` | Left-align managed conversation content |
+| `cap` | `"none"` | Optional width cap; string value |
+| `auto` | `true` | Enable pane-width and device checks |
+| `autoMinWidth` | `1100` | Minimum effective chat-pane width in px |
+| `disableBelowHeight` | `560` | Minimum window height in px; `0` disables |
+| `disableOnTouch` | `false` | Optionally avoid adaptive widening on touch devices |
+| `gutterMin` / `gutterMax` | `16` / `36` | Minimum and maximum horizontal gutters in px |
+| `gutterVw` | `2` | Responsive gutter component in vw |
+| `widenComposer` | `true` | Independently widen the message composer |
+| `safeMedia` | `true` | Constrain rich content to avoid overflow |
+| `canvasSafeMode` | `true` | Use a cautious layout in detected split views |
+| `lowPowerMode` | `true` | Reduce background DOM work |
+| `pauseWhenHidden` | `true` | Defer selected work in hidden tabs |
+| `performanceTelemetry` | `true` | Collect lightweight local timing measurements |
+| `debugOverlay` | `false` | Show an on-page diagnostics overlay |
+| `toast` / `toastMs` | `true` / `1500` | Status notifications and duration in ms |
+| `closeSettingsOnBackdrop` | `true` | Dismiss settings by clicking outside the dialog |
 
-### Install from GitHub
+**Allowed `cap` values:** `none`, `1200`, `1400`, `1600`, `1800`, `2000`, `2200`, `2400`, `2800`, `3200`, `3600`, `4200` (all strings).
 
-1. Open the current **[`script.user.js`](./script.user.js)** in this repository.
-2. Select **Raw** to open the actual `.user.js` file. If Tampermonkey offers to install it, review the permissions and confirm.
-3. If no installation prompt appears, create a new userscript in Tampermonkey and paste the complete `.user.js` source, preserving its metadata header.
-4. Open or refresh [ChatGPT](https://chatgpt.com/) and check the Tampermonkey menu for **UltraWide ChatGPT**.
-5. Press **`Alt+S`** (outside the message editor) to open settings.
+<details>
+<summary><strong>Advanced runtime settings</strong></summary>
 
-**Manual alternative:** Open [`script.user.js`](./script.user.js), copy its full contents into a new Tampermonkey userscript, and preserve the metadata header.
+| Setting | Base default | Meaning |
+| --- | ---: | --- |
+| `scanDebounceMs` | `240` | Structural scan debounce (ms) |
+| `repairIntervalMs` | `10000` | Repair interval (ms) |
+| `routePollMs` | `10000` | SPA route polling fallback (ms) |
 
-> [!NOTE]
-> The installation link refers to the verified root-level `script.user.js`. Review the script and its permissions before installing.
+In default low-power mode, the effective scan debounce is at least **550 ms** and the two routine intervals above are at least **30 s**. Structural changes may still trigger immediate recovery. See `window.__mlUltraWide.state()` for effective values.
 
-### Update an existing installation
+</details>
 
-1. Install the newer `.user.js` version through Tampermonkey, replacing the existing **UltraWide ChatGPT** installation as appropriate.
-2. Ensure only **one enabled copy** is active to avoid duplicate layout control.
-3. Refresh ChatGPT. Existing settings use `uwc.settings.v14`; the script also includes migration support for earlier storage keys (`v1`-`v13`).
-4. If the old layout persists, inspect the active userscripts and use **Repair now** or reload the page.
+### Keyboard shortcuts
 
-### Temporarily disable or uninstall
+Shortcuts operate outside recognized typing fields and can conflict with browser or extension bindings.
 
-- Press **`Alt+O`** or use the Tampermonkey menu to turn off UltraWide's layout behavior without uninstalling the script.
-- Disable the userscript in Tampermonkey to stop it from loading on subsequent page visits.
-- Uninstall it through Tampermonkey if no longer needed. Stored settings may remain in the userscript manager or browser storage until cleared separately.
-
-## Features
-
-### 1. Wider conversation layout
-
-UltraWide overrides the thread layout's responsive width variables and supplements them with targeted attributes on detected conversation roots and turns. The design accounts for ChatGPT's virtualized conversation structure, so remounted turns can be found again.
-
-- Unlimited-width mode constrained by the available pane and configured side gutters.
-- Optional maximum-width caps from `1200` through `4200` pixels.
-- Optional left-aligned conversation content.
-- Specific handling for current assistant message content and user message bubbles.
-- Avoidance of broad page-wide content rewriting.
-
-### 2. Adaptive, pane-aware sizing
-
-With adaptive mode on, widening activates only when the **effective chat pane** meets the minimum width. The current default is `1100px`. A minimum viewport height and an optional touch-device rule can further restrict activation.
-
-This is especially useful when a sidebar or split-view panel reduces the usable chat area without changing the overall browser window dimensions.
-
-### 3. Composer and rich-content handling
-
-- **Wide composer:** Enable or disable message-composer widening independently.
-- **Safe media:** Constrain images, video, embedded frames, preformatted code, and tables to avoid unnecessary horizontal overflow.
-- **Split-view safe mode:** Adjust widening when a visible artifact or editor panel is detected.
-- **Selective DOM targeting:** Exclude settings dialogs and common code-editor containers from composer discovery.
-
-Split-view detection is heuristic. It is not a guarantee that every future ChatGPT panel variant is recognized.
-
-### 4. Recovery and SPA support
-
-The runtime responds to route changes, DOM mutations, pane resizing, and lifecycle events. Recovery logic includes:
-
-- Detection of missing or altered managed styles and root attributes.
-- Reapplication of externally removed layout markers.
-- Bounded reconciliation and automatic integrity checks.
-- Single-instance replacement and cleanup on stop/restart.
-- Stale-callback protection across runtime restarts.
-- A safety fallback for persistent width/geometry problems.
-
-The script does not promise uninterrupted compatibility with every ChatGPT update; recovery depends on recognizing enough of the current DOM.
-
-### 5. Low-power mode
-
-**Enabled by default.** Low-power mode reduces background work by coalescing structural scans, avoiding ordinary streaming-content rescans, caching short-lived capability checks, and throttling nonessential notice detection.
-
-Under default settings, the effective minimum scan debounce is `550ms`, and the background repair and route-fallback intervals are each at least `30s`. Structural changes may still trigger more immediate work. The watchdog uses a separate adaptive schedule.
-
----
-
-## Configuration
-
-Open the settings dialog with **`Alt+S`**, or select **Settings** from the Tampermonkey menu. Most settings can also be changed through `window.__mlUltraWide.set(...)` in the browser console.
-
-### Layout and adaptive behavior
-
-| Setting | Default | Description |
-| --- | --- | --- |
-| `enabled` | `true` | Enable UltraWide's managed layout behavior |
-| `wide` | `true` | Enable expanded width |
-| `left` | `true` | Left-align managed content |
-| `cap` | `"none"` | Maximum content width (`none` = no fixed pixel cap) |
-| `auto` | `true` | Enable adaptive activation rules |
-| `autoMinWidth` | `1100` | Minimum effective chat-pane width, in pixels |
-| `disableOnTouch` | `false` | Suppress adaptive widening on touch-like devices |
-| `disableBelowHeight` | `560` | Minimum browser window height, in pixels (`0` disables the rule) |
-| `gutterMin` | `16` | Minimum horizontal gutter, in pixels |
-| `gutterVw` | `2` | Responsive gutter, in viewport-width units (`vw`) |
-| `gutterMax` | `36` | Maximum horizontal gutter, in pixels |
-| `widenComposer` | `true` | Widen the message composer |
-| `safeMedia` | `true` | Apply rich-content overflow constraints |
-| `canvasSafeMode` | `true` | Adapt layout in detected split-view/editor states |
-| `toast` | `true` | Show status notifications |
-
-Allowed width caps:
-
-```text
-none | 1200 | 1400 | 1600 | 1800 | 2000 | 2200 | 2400 | 2800 | 3200 | 3600 | 4200
-```
-
-**Note:** Disabling `auto` bypasses the adaptive width, height, and touch activation checks; it does not disable `enabled` or `wide`.
-
-### Runtime and advanced behavior
-
-| Setting | Default | Description |
-| --- | --- | --- |
-| `toastMs` | `1500` | Duration of status messages, in milliseconds |
-| `scanDebounceMs` | `240` | Base DOM scan debounce; low-power mode can raise it |
-| `repairIntervalMs` | `10000` | Base periodic repair interval, in milliseconds |
-| `routePollMs` | `10000` | Base SPA route-fallback polling interval, in milliseconds |
-| `lowPowerMode` | `true` | Reduce background processing |
-| `pauseWhenHidden` | `true` | Defer selected background work while the tab is hidden |
-| `performanceTelemetry` | `true` | Record lightweight local timing metrics |
-| `debugOverlay` | `false` | Show a runtime diagnostic overlay |
-| `closeSettingsOnBackdrop` | `true` | Allow closing settings by clicking the backdrop |
-
-Numeric settings are validated and clamped by the script. Configured base intervals may differ from **effective** low-power intervals; inspect `state()` to see the latter.
-
-### Example configurations
-
-Use the browser developer console on ChatGPT:
-
-```js
-// Wider layout, capped at 2400px, with adaptive activation.
-window.__mlUltraWide.set({ cap: '2400', auto: true });
-
-// Keep the wider conversation but leave the composer at its native width.
-window.__mlUltraWide.set({ widenComposer: false });
-
-// Prioritize reduced background activity.
-window.__mlUltraWide.set({
-  lowPowerMode: true,
-  pauseWhenHidden: true,
-  debugOverlay: false
-});
-
-// Restore all default settings.
-window.__mlUltraWide.reset();
-```
-
-`cap` values are **strings**, including `"none"`. Invalid cap values cause `set()` to throw an error instead of silently choosing another width.
+| Keys | Action | Keys | Action |
+| --- | --- | --- | --- |
+| `Alt+S` | Open settings | `Alt+O` | Toggle layout |
+| `Alt+U` | Toggle wide mode | `Alt+L` | Toggle left alignment |
+| `Alt+M` | Cycle width caps | `Alt+A` | Toggle adaptive mode |
+| `Alt+C` | Toggle split-view safe mode | `Alt+R` | Reset defaults |
 
 > [!CAUTION]
-> Closing the settings dialog **after changing saved settings** can trigger a guarded page reload. Save or copy unfinished ChatGPT drafts before editing settings.
+> Closing settings after saving changes can trigger a guarded page reload. Preserve unfinished ChatGPT drafts before changing settings.
 
-## Keyboard shortcuts
+## 🧩 Console API
 
-Shortcuts are handled when focus is **outside** a text input, contenteditable editor, or other recognized typing target. Browser or extension shortcut conflicts may prevent activation.
-
-| Shortcut | Action |
-| --- | --- |
-| `Alt+O` | Enable / disable the script's layout behavior |
-| `Alt+U` | Enable / disable UltraWide width |
-| `Alt+L` | Toggle left alignment |
-| `Alt+M` | Cycle maximum-width caps |
-| `Alt+A` | Toggle adaptive mode |
-| `Alt+C` | Toggle split-view safe mode |
-| `Alt+S` | Open settings |
-| `Alt+R` | Reset settings to defaults |
-
-The Tampermonkey menu also provides quick toggles, rescan, diagnostics export, bug-report export, and reset actions.
-
----
-
-## Diagnostics and console API
-
-The userscript exposes a local API at **`window.__mlUltraWide`**. Open the browser developer console on a ChatGPT page where the userscript is running.
-
-### Start here
+The script provides the local `window.__mlUltraWide` API. In the browser console on a ChatGPT tab where the script is active:
 
 ```js
 const uwc = window.__mlUltraWide;
 
-uwc.state();           // Settings, layout status, scan counts, runtime details
-uwc.verify();          // Named integrity checks with an aggregate ok flag
-uwc.health();          // Composite runtime health and component scores
-uwc.capabilities();    // Detected DOM capabilities
-uwc.diagnostics();     // Full local diagnostics object
-uwc.repair();          // Request layout repair
-uwc.selfTest();        // Runtime checks for the current page
-uwc.regressionTest();  // Deterministic built-in contract tests
-```
-
-### API reference
-
-| Group | Methods |
-| --- | --- |
-| Lifecycle | `start()`, `stop()`, `restart()` |
-| Layout control | `apply()`, `scan()`, `repair()`, `set({...})`, `reset()`, `caps()` |
-| UI | `openSettings()`, `closeSettings()` |
-| Inspection | `state()`, `diagnostics()`, `capabilities()`, `verify()`, `invariants()` |
-| Health | `health()`, `healthBreakdown()`, `selectorHealth()`, `performanceBudget()`, `repairEffectiveness()` |
-| Repair analysis | `reconcile()`, `enforce()`, `repairPlan()`, `repairHistory()`, `convergence()`, `failureCodes()` |
-| DOM/runtime | `strategy()`, `fingerprint()`, `debugEvents()`, `clearSafeFallback()` |
-| Tests | `selfTest()`, `regressionTest()`, `lifecycleTortureSelfTest()` |
-| Exports | `copyDiagnostics()`, `downloadDiagnostics()`, `downloadBugReport()` |
-
-Most inspection methods return objects; some maintenance methods change runtime state. **Run the lifecycle torture test only when you can tolerate a temporary stop/restart of the script.**
-
-### Reporting a problem
-
-1. Reproduce the problem and record the ChatGPT view (Chat, Work, or split view).
-2. Check `window.__mlUltraWide.verify()` and `window.__mlUltraWide.selfTest()`.
-3. Use **Download diagnostics** or **Download bug report** from Settings or the Tampermonkey menu.
-4. Record whether a manual **Repair now** or page reload corrected it.
-5. When filing a GitHub issue, include reproduction steps, expected versus actual behavior, browser/userscript-manager details, and **redacted** diagnostics if helpful.
-
-**Privacy reminder:** Diagnostics can contain the current page URL, browser user agent, settings, DOM information, and runtime events. Review exports before publishing them. Do not attach private conversation content, tokens, or other sensitive information to public issues.
-
-## Troubleshooting
-
-| Symptom | Check / action |
-| --- | --- |
-| Nothing changes on ChatGPT | Verify Tampermonkey is active, only one script copy is enabled, and `state().enabled` / `state().wide` are `true`. Refresh the page. |
-| Layout stays narrow | Check `state().activeWide`, `autoMinWidth`, browser height, and effective pane width. Try `auto: false` for diagnosis. |
-| Composer remains narrow | Check `widenComposer`. Composer detection excludes dialogs and unrelated editors. |
-| Split view looks cramped | Enable `canvasSafeMode`; reduce `cap` or return to `auto: true`. |
-| Layout breaks after navigation | Run `window.__mlUltraWide.scan()` or `repair()`, then inspect `verify()` and compatibility diagnostics. |
-| A user or assistant turn loses styling | Run `repair()`; check marker integrity and the selected DOM strategy. |
-| Noticeable CPU use | Keep `lowPowerMode` and `pauseWhenHidden` on; disable `debugOverlay`. Compare scan and repair metrics before/after. |
-| Shortcut does not work | Move focus outside the composer and check for a browser/extension shortcut conflict. |
-| Settings revert | Check `state().storageAvailable`; userscript-manager storage permissions or local-storage restrictions may interfere. |
-| Page reloads after settings | This is expected when closing a changed settings dialog; a reload-loop guard limits repeated reloads. |
-| Safe fallback is active | Inspect `state().safeFallbackReason` and `verify()`. Correct pane/geometry issues before manually calling `clearSafeFallback()`. |
-
-**Useful diagnostic sequence:**
-
-```js
-const uwc = window.__mlUltraWide;
-console.table({
-  enabled: uwc.state().enabled,
-  activeWide: uwc.state().activeWide,
-  paneWidth: uwc.state().effectivePaneWidth,
-  detectedTurns: uwc.state().detectedTurns
-});
+// Inspect
+uwc.state();
 uwc.verify();
+uwc.health();
+uwc.capabilities();
+uwc.diagnostics();
+
+// Configure - cap values are strings
+uwc.set({ cap: '2400', auto: true, widenComposer: false });
+
+// Recover or restore
 uwc.repair();
-uwc.selfTest();
+uwc.reset();
 ```
 
----
+<details>
+<summary><strong>More inspection, lifecycle, and export commands</strong></summary>
 
-## Testing and verification
+| Area | Available methods |
+| --- | --- |
+| Runtime | `start()`, `stop()`, `restart()`, `apply()`, `scan()`, `reconcile()`, `enforce()` |
+| Settings | `set({...})`, `reset()`, `caps()`, `openSettings()`, `closeSettings()` |
+| Integrity | `verify()`, `invariants()`, `health()`, `healthBreakdown()`, `selectorHealth()` |
+| Analysis | `state()`, `diagnostics()`, `capabilities()`, `strategy()`, `fingerprint()`, `performanceBudget()` |
+| Recovery | `repair()`, `repairPlan()`, `repairHistory()`, `repairEffectiveness()`, `convergence()`, `failureCodes()`, `clearSafeFallback()` |
+| Tests | `selfTest()`, `regressionTest()`, `lifecycleTortureSelfTest()` |
+| Reports | `debugEvents()`, `copyDiagnostics()`, `downloadDiagnostics()`, `downloadBugReport()` |
 
-**Historical validation record:** The documented synthetic test results apply to version `2026.10.12.2`, not the current `2026.10.13.1` script. No equivalent current-version test outcome is asserted here.
+Some commands mutate runtime state. In particular, `lifecycleTortureSelfTest()` intentionally stops and restarts the script.
 
-| Validation | Result | Scope |
+</details>
+
+## 🛠️ Troubleshooting
+
+| Problem | First checks |
+| --- | --- |
+| No width change | Confirm only one active copy, `state().enabled`, `state().wide`, and refresh. |
+| Still narrow | Inspect `state().activeWide`, pane width, `autoMinWidth`, and viewport height. |
+| Composer unchanged | Confirm `widenComposer` is enabled. Dialogs and unrelated editors are intentionally excluded. |
+| Split view is cramped | Check `canvasSafeMode`; try a smaller cap or adaptive sizing. |
+| Layout changed after navigation | Run `window.__mlUltraWide.repair()` and inspect `verify()`. |
+| High CPU usage | Leave `lowPowerMode` and `pauseWhenHidden` enabled; disable the debug overlay. |
+| Hotkey does nothing | Move focus out of the composer; check browser and extension shortcut conflicts. |
+| Settings do not persist | Inspect `state().storageAvailable` and userscript storage permissions. |
+| Safe fallback active | Inspect `state().safeFallbackReason` and `verify()` before clearing it. |
+
+For a reproducible issue, capture the script version, browser, userscript manager, ChatGPT view, steps, expected and actual result, and **redacted** diagnostics. [Open a GitHub issue](https://github.com/jsmlabs/ultrawide-chatgpt/issues/new).
+
+> [!WARNING]
+> Diagnostic exports may include page URLs, user-agent data, settings, DOM indicators, and runtime events. Review and redact before sharing; never publish private conversations or credentials.
+
+## 🧪 Verification and limitations
+
+| Evidence | Status | Scope |
 | --- | --- | --- |
-| `node --check` | Passed | JavaScript parsing |
-| Built-in regression suite | **20 passed / 0 failed** | Synthetic DOM fixture |
-| Initial transcript and composer markers | Passed | Synthetic DOM fixture |
-| Externally removed marker recovery | Passed | Synthetic DOM fixture |
-| Composer option CSS exclusion | Passed | Synthetic DOM fixture |
-| Disabled state after simulated resize | Passed | Synthetic DOM fixture |
-| Re-enable, restart, reinjection, cleanup | Passed | Synthetic DOM fixture |
-| Actual ChatGPT browser behavior | **Not verified** | Requires live testing |
-| Live split-view and Work compatibility | **Not verified** | Requires live testing |
-| Browser performance benchmarks | **Not verified** | Requires live testing |
+| Historical `node --check` | Previously reported as passed | JavaScript parsing of earlier version |
+| Historical built-in regression suite | **20 passed, 0 failed** | Synthetic DOM, version `2026.10.12.2` |
+| Current userscript `2026.10.13.1` | **Not independently validated here** | No current-version runtime test claim |
+| Live ChatGPT / Work / split view | **Unverified** | Requires real-browser validation |
+| Performance and resource usage | **Unverified** | Requires measurements on target browsers |
 
-### Reproduce the available tests
+The prior synthetic test results must **not** be interpreted as validation of version `2026.10.13.1` or of live ChatGPT compatibility. No external test runner or validation-report file is included in the current repository.
 
-For the current script, JavaScript syntax can be checked locally with Node.js:
+To check JavaScript syntax locally, after obtaining the repository:
 
 ```bash
 node --check script.user.js
 ```
 
-Run the built-in checks on an actual ChatGPT page:
+To evaluate the current browser session:
 
 ```js
 window.__mlUltraWide.regressionTest();
@@ -335,120 +187,42 @@ window.__mlUltraWide.selfTest();
 window.__mlUltraWide.verify();
 ```
 
-**Historical test limitation:** The earlier 20-test result used a mocked DOM and cannot establish real browser layout accuracy, performance, or current-version compatibility. The previously referenced regression runner and validation report are not present at their documented root paths.
+**Practical acceptance criteria:** confirm normal and long conversations, chat-pane resizing, sidebars, Work, split view, composer independence, refresh persistence, disable/re-enable cleanup, and navigation recovery. Check that the page does not overflow horizontally and inspect diagnostics for persistent errors. These are manual checks, not reported successful tests.
 
-### Suggested live acceptance checks
-
-Before treating a new ChatGPT DOM revision as compatible, verify:
-
-1. A normal conversation renders at the configured width without horizontal page overflow.
-2. Long conversations remain usable as turns mount and unmount during scrolling.
-3. The composer toggle affects the composer without widening unrelated editors.
-4. Chat, Work, narrow panes, sidebar changes, and split-view panels stay within their visible bounds.
-5. Settings persist after refresh and previous versions migrate correctly.
-6. Disabling the script removes managed layout CSS and markers; re-enabling restores them.
-7. Navigation, resizes, hidden-tab transitions, and repeated reinjection do not create duplicate styles or unnecessary loops.
-8. Runtime diagnostics show no recurring errors, and interaction remains responsive on the target device.
-
----
-
-## Design and implementation
-
-The implementation is a single self-contained userscript. No build step or external JavaScript framework is required at installation time.
+## 🏗️ How it works
 
 ```text
-ChatGPT DOM / SPA events
-        │
-        ▼
-Capability detection + pane measurement
-        │
-        ▼
-DOM strategy + managed marker discovery
-        │
-        ▼
-Thread-variable and targeted CSS application
-        │
-        ▼
-Integrity monitoring + bounded reconciliation
-        │
-        └── Diagnostics / safe fallback / lifecycle cleanup
+ChatGPT navigation / DOM / pane resize
+                 │
+                 ▼
+     Detect layout capabilities
+                 │
+                 ▼
+       Measure effective pane
+                 │
+                 ▼
+    Select targets + apply CSS
+                 │
+                 ▼
+       Verify and repair state
 ```
 
-Notable implementation decisions:
+UltraWide is a **single self-contained userscript**, with no application build step. It uses targeted layout rules and markers, ChatGPT thread-width variables where available, and bounded observation/reconciliation to handle supported DOM changes. Detection and split-view classification are heuristic; they cannot guarantee compatibility with future interface revisions. The userscript runs in the browser and does not replace or proxy the ChatGPT service.
 
-- **Scoped CSS:** Uses script-specific `data-uwc-*` attributes alongside ChatGPT layout variables, rather than replacing application markup.
-- **Small repair surface:** Tracks intended markers and dirty regions, reconciling changes rather than clearing every marker on each scan.
-- **Observability:** Exposes selector coverage, component health, width checks, timing budgets, and repair-effectiveness metrics. These are diagnostic indicators, not guarantees.
-- **Lifecycle hygiene:** Aborts managed listeners and disconnects observers, cancels scheduled work, and removes owned styles/markers when stopped.
-- **Storage migration:** Reads earlier settings formats and normalizes values to current defaults and ranges.
+**Repository files:** [`script.user.js`](./script.user.js) · [`README.md`](./README.md) · [`LICENSE`](./LICENSE)
 
-## Privacy and security
+## 📄 License and attribution
 
-- **Client-side operation:** The reviewed script does not contain a `fetch`, `XMLHttpRequest`, or other explicit runtime telemetry-upload call. Its layout processing and runtime diagnostics run locally.
-- **Storage:** Prefers Tampermonkey `GM_getValue` / `GM_setValue`; falls back to browser `localStorage` when needed. A `sessionStorage` key tracks reload-loop protection.
-- **Permissions:** Declares the four `GM_*` grants shown in the userscript header and matches only `chatgpt.com` and `www.chatgpt.com` URL patterns.
-- **External metadata:** The userscript's icon refers to a CDN URL. That metadata resource is separate from runtime telemetry.
-- **Diagnostics:** Reports are generated/downloaded locally but can expose environment details if you share them.
+Distributed under **[JSM Custom License v1.1](./LICENSE)**, a **custom source-available license, not an OSI-approved open-source license**. It permits use, modification, redistribution, and commercial integration subject to attribution and other conditions; resale of substantially unchanged standalone copies is restricted. Read the complete license before redistributing or using the software commercially.
 
-Install userscripts only from a source you trust, review changes before updates, and avoid running multiple scripts that modify the same ChatGPT width variables without checking compatibility.
-
-## Limitations
-
-- ChatGPT is a third-party application with internal HTML, attributes, and CSS variables that may change at any time.
-- DOM strategy confidence and health scores are heuristics, not proof of correct rendering.
-- Automatic repair cannot fix every incompatibility or conflict with other browser extensions.
-- Width behavior may vary by browser, zoom level, platform, ChatGPT experiment, or UI variant.
-- The currently supplied validation evidence is **synthetic**, not a completed live-browser acceptance test.
+Created by **jsmdev**. This independent project is **not affiliated with or endorsed by OpenAI**. ChatGPT is a trademark of its respective owner.
 
 ---
-
-## Project files
-
-| File | Purpose |
-| --- | --- |
-| [`script.user.js`](./script.user.js) | Current installable Tampermonkey userscript (`2026.10.13.1`) |
-| [`LICENSE`](./LICENSE) | JSM Custom License v1.1; consistent with the script metadata |
-| `README.md` | Installation, usage, reference, and maintenance documentation |
-
-## Release notes
-
-### `2026.10.13.1` - current script
-
-The repository currently ships `script.user.js` at this version. Its source header documents Chat/Work compatibility adaptations, lifecycle recovery and diagnostics improvements; these are implementation descriptions, not independently verified browser results.
-
-### `2026.10.12.2` - reliability and lifecycle fixes
-
-- Corrected disabled-state root cleanup after environment events.
-- Fixed the `widenComposer: false` interaction with global composer width variables and CSS caching.
-- Prevented unnecessary reconciliation scheduling while a verification pass is pending.
-- Released pending reconciliation state when a scan fails.
-- Refined mutation-intent attribution so subsequent external edits are not incorrectly suppressed.
-- Recovered deleted managed-marker attributes already present in internal tracking sets.
-- Removed false-positive turn-marker invariant failures while disabled.
-- Extended the built-in regression suite to **20 tests**.
-
-The historical validation-report file referenced by the prior README is not available at that path in the current repository.
-
-## Contributing and support
-
-Reproducible bug reports and narrowly scoped compatibility fixes are welcome where the repository accepts contributions. When reporting a regression, include the script version, affected ChatGPT view, reproduction steps, console health results, and a minimal redacted diagnostic export.
-
-For proposed fixes, preserve existing settings names and user-facing shortcuts where possible, keep observer work bounded, and test both **enabled** and **disabled** lifecycle paths. Validate changes in a real browser before claiming ChatGPT compatibility.
-
----
-
-## License and attribution
-
-**License:** The repository's [`LICENSE`](LICENSE) provides **JSM Custom License v1.1**, allowing use, modification, and commercial integration subject to attribution and a restriction on standalone resale of substantially unchanged copies. The userscript metadata identifies `JSM-Custom-1.1`. This is a custom license, not MIT or an OSI-approved open-source license. Prior permissions validly granted under different terms are not automatically revoked.
-
-Created by **jsmdev**. This is an independent userscript and is **not affiliated with, endorsed by, or maintained by OpenAI**. ChatGPT is a trademark of its respective owner.
 
 <div align="center">
 
----
+**A wider workspace for ChatGPT.**
 
-**More room for the conversation. More control over the layout.**
-
-[Back to top](#-ultrawide-chatgpt) · [Install](#installation) · [Configuration](#configuration) · [Diagnostics](#diagnostics-and-console-api) · [Source](script.user.js)
+[Install](https://raw.githubusercontent.com/jsmlabs/ultrawide-chatgpt/master/script.user.js) · [Settings](#-configuration) · [Troubleshooting](#-troubleshooting) · [Back to top](#️-ultrawide-chatgpt)
 
 </div>
