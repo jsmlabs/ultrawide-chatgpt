@@ -223,6 +223,6 @@ Created by **jsmdev**. This independent project is **not affiliated with or endo
 
 **A wider workspace for ChatGPT.**
 
-[Install](https://raw.githubusercontent.com/jsmlabs/ultrawide-chatgpt/master/script.user.js) · [Settings](#-configuration) · [Troubleshooting](#-troubleshooting) · [Back to top](#️-ultrawide-chatgpt)
+[Install](https://raw.githubusercontent.com/jsmlabs/ultrawide-chatgpt/master/script.user.js) · [Settings](#-configuration) · [Troubleshooting](#-troubleshooting) · [Back to top](#-ultrawide-chatgpt)
 
 </div>
