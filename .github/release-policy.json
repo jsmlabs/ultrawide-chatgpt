@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "repository": "jsmlabs/ultrawide-chatgpt",
+  "default_branch": "master",
+  "mode": "AUDIT",
+  "tagging_enabled": false,
+  "publish_github_releases": false,
+  "version_format": "calendar",
+  "version_source": {
+    "path": "script.user.js",
+    "kind": "userscript",
+    "key": "@version"
+  },
+  "additional_version_sources": []
+}
