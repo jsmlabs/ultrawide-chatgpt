@@ -171,12 +171,13 @@ For a reproducible issue, capture the script version, browser, userscript manage
 | Live ChatGPT / Work / split view | **Unverified** | Requires real-browser validation |
 | Performance and resource usage | **Unverified** | Requires measurements on target browsers |
 
-The prior synthetic test results must **not** be interpreted as validation of version `2026.10.13.1` or of live ChatGPT compatibility. No external test runner or validation-report file is included in the current repository.
+The prior synthetic test results must **not** be interpreted as validation of version `2026.10.13.1` or of live ChatGPT compatibility. Node.js tests now exercise selected pane-width, position, and composer contracts in isolation. These checks do not validate the live ChatGPT DOM or its split-view behavior. Check CI results for the exact revision before treating them as passing.
 
 To check JavaScript syntax locally, after obtaining the repository:
 
 ```bash
 node --check script.user.js
+node --test tests/*.test.cjs
 ```
 
 To evaluate the current browser session:
