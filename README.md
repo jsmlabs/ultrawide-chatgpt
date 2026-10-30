@@ -166,6 +166,7 @@ Some commands mutate runtime state. In particular, `lifecycleTortureSelfTest()` 
 | Hotkey does nothing | Move focus out of the composer; check browser and extension shortcut conflicts. |
 | Settings do not persist | Inspect `state().storageAvailable` and userscript storage permissions. |
 | Safe fallback active | Inspect `state().safeFallbackReason` and `verify()` before clearing it. |
+| `window.__mlUltraWide` is undefined | Confirm Tampermonkey is enabled for `chatgpt.com` and the userscript matches the page. Check extension permissions and console execution context; an isolated userscript world or Content Security Policy may prevent access from the page console. Try the Tampermonkey menu/`Alt+S` first. |
 
 For a reproducible issue, capture the script version, browser, userscript manager, ChatGPT view, steps, expected and actual result, and **redacted** diagnostics. [Open a GitHub issue](https://github.com/jsmlabs/ultrawide-chatgpt/issues/new).
 
@@ -232,6 +233,14 @@ UltraWide is a **single self-contained userscript**, with no application build s
 **Provenance and verification:** Both full sources were provided directly (published `2026.10.13.1` and petrt3522's version). A source diff and static security audit found no newly introduced networking, external dependencies, dynamic execution or additional userscript permissions. Static review cannot establish malware absence or live compatibility. The merged GitHub source contains the contributor's changes with targeted hardening and version metadata consistency; see [release notes](./RELEASE_NOTES_2026.10.30.1.md) for the verification boundary.
 
 Contributor acknowledgement is retained in source, documentation, and release notes. **License history:** The older owner-provided Greasy Fork source and contributor fork declared MIT. The GitHub repository and current published Greasy Fork listing now declare JSM Custom License v1.1. Historical license grants and any applicable contributor notices must still be respected; the public metadata match does not establish a legal review or byte-for-byte code parity.
+
+### Reporting issues and contributing
+
+Use [GitHub Issues](https://github.com/jsmlabs/ultrawide-chatgpt/issues) for reproducible bugs and suggestions. Include the userscript version, browser and userscript manager, ChatGPT view, steps to reproduce, expected and observed behavior, and screenshots or **redacted** diagnostics where helpful. Do not post conversation content, credentials, or private URLs.
+
+Code contributions should preserve the userscript's settings and public API, keep new permissions and dependencies justified, and include regression coverage where feasible. Run `node --check script.user.js` and `node --test tests/*.test.cjs` before submitting a pull request. Contributor credit is retained for accepted improvements; see [petrt3522's integration](https://github.com/jsmlabs/ultrawide-chatgpt/pull/4).
+
+---
 
 ## 📄 License and attribution
 
