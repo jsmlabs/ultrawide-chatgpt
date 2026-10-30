@@ -42,7 +42,7 @@ test('no new network, remote loading, or dynamic execution primitives', () => {
 });
 
 test('performance scoring distinguishes tiny overruns from severe overruns', () => {
-  const context = vm.createContext({});
+  const context = vm.createContext({ PERFORMANCE_SCORE_EXCESS_SCALE_MS: 16 });
   vm.runInContext(extract('performanceScoreFromExcess'), context);
   assert.equal(context.performanceScoreFromExcess(0, 0), 100);
   assert.ok(context.performanceScoreFromExcess(0.1, 1) >= 99);
