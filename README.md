@@ -18,7 +18,7 @@ A responsive, configurable **Tampermonkey userscript** that widens ChatGPT conve
 ---
 
 > [!IMPORTANT]
-> **Compatibility:** The source version is `2026.10.13.1`. Current live-browser compatibility with ChatGPT Chat, Work, and split view has **not been independently verified**. ChatGPT's DOM changes over time. See [verification](#-verification-and-limitations) before relying on this customization.
+> **Compatibility:** The published version is `2026.10.13.1`. The contributor-integration branch contains candidate `2026.10.30.1` (unreleased). Current live-browser compatibility with ChatGPT Chat, Work, and split view has **not been independently verified**. ChatGPT's DOM changes over time. See [verification](#-verification-and-limitations) before relying on this customization.
 
 ## ✨ Features
 
@@ -167,11 +167,11 @@ For a reproducible issue, capture the script version, browser, userscript manage
 | --- | --- | --- |
 | Historical `node --check` | Previously reported as passed | JavaScript parsing of earlier version |
 | Historical built-in regression suite | **20 passed, 0 failed** | Synthetic DOM, version `2026.10.12.2` |
-| Current userscript `2026.10.13.1` | **Not independently validated here** | No current-version runtime test claim |
+| Candidate `2026.10.30.1` (review branch) | **CI validation required at exact head** | Syntax, isolated layout/security/performance contracts |
 | Live ChatGPT / Work / split view | **Unverified** | Requires real-browser validation |
 | Performance and resource usage | **Unverified** | Requires measurements on target browsers |
 
-The prior synthetic test results must **not** be interpreted as validation of version `2026.10.13.1` or of live ChatGPT compatibility. Node.js tests now exercise selected pane-width, position, and composer contracts in isolation. These checks do not validate the live ChatGPT DOM or its split-view behavior. Check CI results for the exact revision before treating them as passing.
+The prior synthetic test results must **not** be interpreted as validation of version `2026.10.13.1` or of live ChatGPT compatibility. Node.js tests now exercise pane-width, position, composer, CSS cleanup, contributor integration, security-pattern, and performance contracts in isolation. These checks do not validate the live ChatGPT DOM or its split-view behavior. Check CI results for the exact revision before treating them as passing.
 
 To check JavaScript syntax locally, after obtaining the repository:
 
@@ -216,11 +216,11 @@ UltraWide is a **single self-contained userscript**, with no application build s
 
 **petrt3522** proposed practical layout and recovery improvements for UltraWide ChatGPT in an [October 29, 2026 Greasy Fork discussion](https://greasyfork.org/scripts/557270-ultrawide-chatgpt/discussions/342892) and offered a [modified script](https://greasyfork.org/en/scripts/602847-ultrawide-chatgpt). Thank you for investigating the issues, sharing the work, and offering to contribute it back to the original project.
 
-The current [integration review PR #4](https://github.com/jsmlabs/ultrawide-chatgpt/pull/4) includes maintainer-adapted improvements informed by that contribution: pane-relative width syncing, independent Work composer verification, and bounded horizontal clipping diagnostics. The proposed Work positioning, clipping fallbacks, repair-loop changes, and telemetry adjustments remain under review.
+The current [integration review PR #4](https://github.com/jsmlabs/ultrawide-chatgpt/pull/4) now integrates the contributor's supplied source with maintainer hardening: pane-relative width, Work-native and fallback clipping alignment, independent composer verification, bounded position diagnostics and repair retries, fresher selector health, lower-overhead monitoring, performance-severity scoring and expanded diagnostics. **The Work-specific CSS/translation paths remain unverified in a live browser**, so this is still an unreleased draft.
 
-**Provenance and verification:** The complete modified script was not retrievable during the latest review. The PR is therefore **not** a verified complete merge of the contributor's version. The additional source audit and live ChatGPT compatibility checks must finish before deciding what else to integrate. No claim that the external fork is free of malicious behavior is made without a complete source audit.
+**Provenance and verification:** Both full sources were provided directly (published `2026.10.13.1` and petrt3522's version). A source diff and static security audit found no newly introduced networking, external dependencies, dynamic execution or additional userscript permissions. Static review cannot establish malware absence or live compatibility. The review branch contains the contributor's changes with targeted hardening and exact-version metadata consistency; see [draft release notes](./RELEASE_NOTES_2026.10.30.1.md) for the verification boundary.
 
-Contributor acknowledgement remains part of the project even if a particular experimental change cannot safely ship.
+Contributor acknowledgement is retained in source, documentation, and draft release notes. The submitted fork declared MIT, while this repository's original code is distributed under JSM Custom License v1.1; attribution and the distribution license must be reconciled before publication.
 
 ## 📄 License and attribution
 
