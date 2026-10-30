@@ -11,14 +11,14 @@ A responsive, configurable **Tampermonkey userscript** that widens ChatGPT conve
 [![ChatGPT](https://img.shields.io/badge/target-ChatGPT%20Chat%20%26%20Work-334155?style=flat-square)](https://chatgpt.com/)
 [![License](https://img.shields.io/badge/license-JSM%20Custom%20v1.1-64748b?style=flat-square)](./LICENSE)
 
-[**Install userscript**](https://raw.githubusercontent.com/jsmlabs/ultrawide-chatgpt/master/script.user.js) · [Features](#-features) · [Settings](#-configuration) · [Troubleshooting](#-troubleshooting) · [Source](./script.user.js)
+[**Install from GitHub**](https://raw.githubusercontent.com/jsmlabs/ultrawide-chatgpt/master/script.user.js) · [Greasy Fork](https://greasyfork.org/en/scripts/557270-ultrawide-chatgpt) · [Features](#-features) · [Settings](#-configuration) · [Troubleshooting](#-troubleshooting) · [Source](./script.user.js)
 
 </div>
 
 ---
 
 > [!IMPORTANT]
-> **Compatibility:** The latest GitHub source is release candidate `2026.10.30.1`, which has **not** been published to Greasy Fork. The last independently identified Greasy Fork release is `2026.10.13.1`. Current live-browser compatibility with ChatGPT Chat, Work, and split view has **not been independently verified**. ChatGPT's DOM changes over time. See [verification](#-verification-and-limitations) before relying on this customization.
+> **Release and compatibility:** The repository's `master` contains `2026.10.30.1` ([merged PR #4](https://github.com/jsmlabs/ultrawide-chatgpt/pull/4)). The maintainer reports publishing this version to [Greasy Fork](https://greasyfork.org/en/scripts/557270-ultrawide-chatgpt) on 2026-10-30. However, the publicly retrievable Greasy Fork listing and version history still showed `2026.10.13.1` when independently queried on that date. **The remote deployment/version match is not yet independently confirmed.** Live ChatGPT Work, Projects, zoom, and split-view functionality have not been comprehensively tested. See [verification](#-verification-and-limitations).
 
 ## ✨ Features
 
@@ -167,7 +167,7 @@ For a reproducible issue, capture the script version, browser, userscript manage
 | --- | --- | --- |
 | Historical `node --check` | Previously reported as passed | JavaScript parsing of earlier version |
 | Historical built-in regression suite | **20 passed, 0 failed** | Synthetic DOM, version `2026.10.12.2` |
-| Candidate `2026.10.30.1` (review branch) | **CI validation required at exact head** | Syntax, isolated layout/security/performance contracts |
+| GitHub `2026.10.30.1` | **10/10 Node tests and syntax passed on PR head** [`22dc850`](https://github.com/jsmlabs/ultrawide-chatgpt/commit/22dc850ab314446b0e39dc11f09857f5fd488e1d) | Isolated geometry, safety-pattern, and performance contracts; not a live-browser test |
 | Live ChatGPT / Work / split view | **Unverified** | Requires real-browser validation |
 | Performance and resource usage | **Unverified** | Requires measurements on target browsers |
 
@@ -216,11 +216,11 @@ UltraWide is a **single self-contained userscript**, with no application build s
 
 **petrt3522** proposed practical layout and recovery improvements for UltraWide ChatGPT in an [October 29, 2026 Greasy Fork discussion](https://greasyfork.org/scripts/557270-ultrawide-chatgpt/discussions/342892) and offered a [modified script](https://greasyfork.org/en/scripts/602847-ultrawide-chatgpt). Thank you for investigating the issues, sharing the work, and offering to contribute it back to the original project.
 
-[Integration PR #4](https://github.com/jsmlabs/ultrawide-chatgpt/pull/4) integrates the contributor's supplied source with maintainer hardening: pane-relative width, Work-native and fallback clipping alignment, independent composer verification, bounded position diagnostics and repair retries, fresher selector health, lower-overhead monitoring, performance-severity scoring and expanded diagnostics. **The maintainer inspected only the visual interface**, not complete runtime functionality. Browser-console diagnostics did not establish a working page-context UltraWide API in the available session. The Work-specific CSS/translation paths remain unverified in a live browser, so this is still **unverified in live ChatGPT Work** and not a published Greasy Fork release. CI regression tests are separate from manual browser testing.
+[Merged integration PR #4](https://github.com/jsmlabs/ultrawide-chatgpt/pull/4) integrated the contributor's supplied source with maintainer hardening: pane-relative width, Work-native and fallback clipping alignment, independent composer verification, bounded position diagnostics and repair retries, fresher selector health, lower-overhead monitoring, performance-severity scoring and expanded diagnostics. **The maintainer inspected only the visual interface**, not complete runtime functionality. Browser-console diagnostics did not establish a working page-context UltraWide API in the available session. The Work-specific CSS/translation paths remain unverified in a live browser. The maintainer reports publishing the Greasy Fork update, but the live Greasy Fork version could not yet be independently matched to GitHub. Automated CI is separate from manual browser testing.
 
-**Provenance and verification:** Both full sources were provided directly (published `2026.10.13.1` and petrt3522's version). A source diff and static security audit found no newly introduced networking, external dependencies, dynamic execution or additional userscript permissions. Static review cannot establish malware absence or live compatibility. The integration candidate contains the contributor's changes with targeted hardening and exact-version metadata consistency; see [draft release notes](./RELEASE_NOTES_2026.10.30.1.md) for the verification boundary.
+**Provenance and verification:** Both full sources were provided directly (published `2026.10.13.1` and petrt3522's version). A source diff and static security audit found no newly introduced networking, external dependencies, dynamic execution or additional userscript permissions. Static review cannot establish malware absence or live compatibility. The merged GitHub source contains the contributor's changes with targeted hardening and version metadata consistency; see [release notes](./RELEASE_NOTES_2026.10.30.1.md) for the verification boundary.
 
-Contributor acknowledgement is retained in source, documentation, and draft release notes. The submitted fork declared MIT, while this repository's original code is distributed under JSM Custom License v1.1; attribution and the distribution license must be reconciled before publication.
+Contributor acknowledgement is retained in source, documentation, and release notes. **License discrepancy remains unresolved:** the owner-provided Greasy Fork source and contributor fork declared MIT, whereas the GitHub repository and merged userscript declare JSM Custom License v1.1. Verify the actual Greasy Fork release metadata and rights notices before asserting license parity.
 
 ## 📄 License and attribution
 
