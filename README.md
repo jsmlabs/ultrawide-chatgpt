@@ -6,7 +6,7 @@
 
 A responsive, configurable **Tampermonkey userscript** that widens ChatGPT conversations and optionally the message composer - without replacing the ChatGPT interface.
 
-[![Version](https://img.shields.io/badge/version-2026.10.13.1-2563eb?style=flat-square)](./script.user.js)
+[![Version](https://img.shields.io/badge/version-2026.10.30.1-2563eb?style=flat-square)](./script.user.js)
 [![Userscript](https://img.shields.io/badge/platform-Tampermonkey-0f766e?style=flat-square)](https://www.tampermonkey.net/)
 [![ChatGPT](https://img.shields.io/badge/target-ChatGPT%20Chat%20%26%20Work-334155?style=flat-square)](https://chatgpt.com/)
 [![License](https://img.shields.io/badge/license-JSM%20Custom%20v1.1-64748b?style=flat-square)](./LICENSE)
@@ -18,7 +18,7 @@ A responsive, configurable **Tampermonkey userscript** that widens ChatGPT conve
 ---
 
 > [!IMPORTANT]
-> **Compatibility:** The source version is `2026.10.13.1`. Current live-browser compatibility with ChatGPT Chat, Work, and split view has **not been independently verified**. ChatGPT's DOM changes over time. See [verification](#-verification-and-limitations) before relying on this customization.
+> **Compatibility:** The latest GitHub source is release candidate `2026.10.30.1`, which has **not** been published to Greasy Fork. The last independently identified Greasy Fork release is `2026.10.13.1`. Current live-browser compatibility with ChatGPT Chat, Work, and split view has **not been independently verified**. ChatGPT's DOM changes over time. See [verification](#-verification-and-limitations) before relying on this customization.
 
 ## ✨ Features
 
@@ -167,16 +167,17 @@ For a reproducible issue, capture the script version, browser, userscript manage
 | --- | --- | --- |
 | Historical `node --check` | Previously reported as passed | JavaScript parsing of earlier version |
 | Historical built-in regression suite | **20 passed, 0 failed** | Synthetic DOM, version `2026.10.12.2` |
-| Current userscript `2026.10.13.1` | **Not independently validated here** | No current-version runtime test claim |
+| Candidate `2026.10.30.1` (review branch) | **CI validation required at exact head** | Syntax, isolated layout/security/performance contracts |
 | Live ChatGPT / Work / split view | **Unverified** | Requires real-browser validation |
 | Performance and resource usage | **Unverified** | Requires measurements on target browsers |
 
-The prior synthetic test results must **not** be interpreted as validation of version `2026.10.13.1` or of live ChatGPT compatibility. No external test runner or validation-report file is included in the current repository.
+The prior synthetic test results must **not** be interpreted as validation of version `2026.10.13.1` or of live ChatGPT compatibility. Node.js tests now exercise pane-width, position, composer, CSS cleanup, contributor integration, security-pattern, and performance contracts in isolation. These checks do not validate the live ChatGPT DOM or its split-view behavior. Check CI results for the exact revision before treating them as passing.
 
 To check JavaScript syntax locally, after obtaining the repository:
 
 ```bash
 node --check script.user.js
+node --test tests/*.test.cjs
 ```
 
 To evaluate the current browser session:
@@ -210,6 +211,16 @@ ChatGPT navigation / DOM / pane resize
 UltraWide is a **single self-contained userscript**, with no application build step. It uses targeted layout rules and markers, ChatGPT thread-width variables where available, and bounded observation/reconciliation to handle supported DOM changes. Detection and split-view classification are heuristic; they cannot guarantee compatibility with future interface revisions. The userscript runs in the browser and does not replace or proxy the ChatGPT service.
 
 **Repository files:** [`script.user.js`](./script.user.js) · [`README.md`](./README.md) · [`LICENSE`](./LICENSE)
+
+## 🤝 Community contributions
+
+**petrt3522** proposed practical layout and recovery improvements for UltraWide ChatGPT in an [October 29, 2026 Greasy Fork discussion](https://greasyfork.org/scripts/557270-ultrawide-chatgpt/discussions/342892) and offered a [modified script](https://greasyfork.org/en/scripts/602847-ultrawide-chatgpt). Thank you for investigating the issues, sharing the work, and offering to contribute it back to the original project.
+
+[Integration PR #4](https://github.com/jsmlabs/ultrawide-chatgpt/pull/4) integrates the contributor's supplied source with maintainer hardening: pane-relative width, Work-native and fallback clipping alignment, independent composer verification, bounded position diagnostics and repair retries, fresher selector health, lower-overhead monitoring, performance-severity scoring and expanded diagnostics. **The maintainer inspected only the visual interface**, not complete runtime functionality. Browser-console diagnostics did not establish a working page-context UltraWide API in the available session. The Work-specific CSS/translation paths remain unverified in a live browser, so this is still **unverified in live ChatGPT Work** and not a published Greasy Fork release. CI regression tests are separate from manual browser testing.
+
+**Provenance and verification:** Both full sources were provided directly (published `2026.10.13.1` and petrt3522's version). A source diff and static security audit found no newly introduced networking, external dependencies, dynamic execution or additional userscript permissions. Static review cannot establish malware absence or live compatibility. The integration candidate contains the contributor's changes with targeted hardening and exact-version metadata consistency; see [draft release notes](./RELEASE_NOTES_2026.10.30.1.md) for the verification boundary.
+
+Contributor acknowledgement is retained in source, documentation, and draft release notes. The submitted fork declared MIT, while this repository's original code is distributed under JSM Custom License v1.1; attribution and the distribution license must be reconciled before publication.
 
 ## 📄 License and attribution
 

@@ -1,0 +1,22 @@
+name: Userscript validation
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  userscript:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: JavaScript syntax
+        run: node --check script.user.js
+      - name: Layout regression tests
+        run: node --test tests/*.test.cjs
