@@ -4,6 +4,8 @@ All notable changes are recorded here. An entry under **Unreleased** is not a pu
 
 ## [2026.10.30.1] - 2026-10-30
 
+**Published on [Greasy Fork](https://greasyfork.org/en/scripts/557270-ultrawide-chatgpt).** See the [release notes](./RELEASE_NOTES_2026.10.30.1.md) for provenance, verification limits and support information.
+
 **Community contribution: [petrt3522](https://greasyfork.org/scripts/557270-ultrawide-chatgpt/discussions/342892)**. Thanks for investigating, iterating on, and sharing the Work, zoom, and layout fixes for integration in the official UltraWide ChatGPT project.
 
 ### Integrated from contributor proposal (maintainer adapted)
