@@ -212,6 +212,16 @@ UltraWide is a **single self-contained userscript**, with no application build s
 
 **Repository files:** [`script.user.js`](./script.user.js) · [`README.md`](./README.md) · [`LICENSE`](./LICENSE)
 
+## 🤝 Community contributions
+
+**petrt3522** proposed practical layout and recovery improvements for UltraWide ChatGPT in an [October 29, 2026 Greasy Fork discussion](https://greasyfork.org/scripts/557270-ultrawide-chatgpt/discussions/342892) and offered a [modified script](https://greasyfork.org/en/scripts/602847-ultrawide-chatgpt). Thank you for investigating the issues, sharing the work, and offering to contribute it back to the original project.
+
+The current [integration review PR #4](https://github.com/jsmlabs/ultrawide-chatgpt/pull/4) includes maintainer-adapted improvements informed by that contribution: pane-relative width syncing, independent Work composer verification, and bounded horizontal clipping diagnostics. The proposed Work positioning, clipping fallbacks, repair-loop changes, and telemetry adjustments remain under review.
+
+**Provenance and verification:** The complete modified script was not retrievable during the latest review. The PR is therefore **not** a verified complete merge of the contributor's version. The additional source audit and live ChatGPT compatibility checks must finish before deciding what else to integrate. No claim that the external fork is free of malicious behavior is made without a complete source audit.
+
+Contributor acknowledgement remains part of the project even if a particular experimental change cannot safely ship.
+
 ## 📄 License and attribution
 
 Distributed under **[JSM Custom License v1.1](./LICENSE)**, a **custom source-available license, not an OSI-approved open-source license**. It permits use, modification, redistribution, and commercial integration subject to attribution and other conditions; resale of substantially unchanged standalone copies is restricted. Read the complete license before redistributing or using the software commercially.
