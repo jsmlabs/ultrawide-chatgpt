@@ -2004,19 +2004,19 @@
       ? runtime.observedPane : resolveActivePane());
     if (!pane || pane.isConnected === false || !pane.style || !settings.enabled ||
         !isWideActive() || runtime.safeFallbackActive) {
-      clearSizedPane();
+      restoreSizedPane();
       return false;
     }
 
     const measured = Number(width) > 0 ? Number(width) :
       Number(getVisibleRect(pane)?.width || 0);
     if (measured < 200 || !Number.isFinite(measured)) {
-      clearSizedPane();
+      restoreSizedPane();
       return false;
     }
 
     if (runtime.sizedPane !== pane) {
-      clearSizedPane();
+      restoreSizedPane();
       runtime.sizedPane = pane;
       runtime.sizedPanePriorValue =
         pane.style.getPropertyValue('--uwc-content-width');
@@ -5108,6 +5108,7 @@ ${safeMediaCss}
       turnWidth,
       composerWidth,
       composerWidthRequired,
+      composerMode: !composer ? 'none' : (canonicalComposer ? 'canonical' : 'independent'),
       composerLayout: canonicalComposer ? 'canonical-thread-bottom' : 'independent-work-or-custom',
       checks
     };
