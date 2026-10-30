@@ -29,7 +29,7 @@ All notable changes are recorded here. An entry under **Unreleased** is not a pu
 
 ### Release gates
 
-- **Not published**. Work CSS offset and fallback alignment still require live browser verification (Chat, Work, Projects, split view, zoom, sidebar changes, SPA remounts, streaming).
+- **Not published**. The maintainer has inspected **only the visible UI/appearance**. Live functionality, Work CSS offset, fallback alignment, browser-zoom handling, SPA remounts, and other end-to-end behaviors have not been confirmed. Browser-console diagnostic attempts did not establish a working page-context API. Automated CI tests are separate evidence and must not be represented as comprehensive manual testing.
 - Static inspection found no new networking, remote code loading, extra userscript permissions, or dynamic execution primitives; this is not a guarantee against all malicious or faulty behavior.
 - The supplied published and contributor scripts both declare MIT; the GitHub repository declares JSM Custom License v1.1. The license notice discrepancy requires owner review before release.
 
