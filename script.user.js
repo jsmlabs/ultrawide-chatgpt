@@ -712,6 +712,10 @@
     observedHead: null,
     observedRoot: null,
     observedPane: null,
+    sizedPane: null,
+    sizedPaneOriginalValue: '',
+    sizedPaneOriginalPriority: '',
+    sizedPaneAppliedValue: '',
 
     eventController: null,
 
@@ -1887,6 +1891,83 @@
     };
   }
 
+  function restoreSizedPane() {
+    const pane = runtime.sizedPane;
+
+    if (
+      pane?.style &&
+      pane.style.getPropertyValue('--uwc-content-width') ===
+        runtime.sizedPaneAppliedValue
+    ) {
+      markMutationIntent(pane, 'attributes', 'style');
+
+      if (runtime.sizedPaneOriginalValue) {
+        pane.style.setProperty(
+          '--uwc-content-width',
+          runtime.sizedPaneOriginalValue,
+          runtime.sizedPaneOriginalPriority
+        );
+      } else {
+        pane.style.removeProperty('--uwc-content-width');
+      }
+    }
+
+    runtime.sizedPane = null;
+    runtime.sizedPaneOriginalValue = '';
+    runtime.sizedPaneOriginalPriority = '';
+    runtime.sizedPaneAppliedValue = '';
+  }
+
+  function syncSizedPane() {
+    const pane = runtime.observedPane?.isConnected
+      ? runtime.observedPane
+      : resolveActivePane();
+
+    if (
+      !pane?.style ||
+      !settings.enabled ||
+      !isWideActive() ||
+      runtime.safeFallbackActive
+    ) {
+      restoreSizedPane();
+      return false;
+    }
+
+    const paneRect = getVisibleRect(pane);
+    if (!paneRect) {
+      restoreSizedPane();
+      return false;
+    }
+
+    if (runtime.sizedPane !== pane) {
+      restoreSizedPane();
+      runtime.sizedPane = pane;
+      runtime.sizedPaneOriginalValue =
+        pane.style.getPropertyValue('--uwc-content-width');
+      runtime.sizedPaneOriginalPriority =
+        pane.style.getPropertyPriority('--uwc-content-width');
+    }
+
+    const width = getExpectedContentWidthPx(paneRect.width);
+    const value = `${Math.round(width * 100) / 100}px`;
+
+    if (
+      width <= 0 ||
+      !Number.isFinite(width)
+    ) {
+      restoreSizedPane();
+      return false;
+    }
+
+    if (pane.style.getPropertyValue('--uwc-content-width') !== value) {
+      markMutationIntent(pane, 'attributes', 'style');
+      pane.style.setProperty('--uwc-content-width', value);
+    }
+
+    runtime.sizedPaneAppliedValue = value;
+    return true;
+  }
+
   function getAdaptiveWidth() {
     const measured =
       runtime.effectivePaneWidth > 0
@@ -1935,6 +2016,60 @@
     return Number.isFinite(cap)
       ? Math.min(available, cap)
       : available;
+  }
+
+  function isCanonicalComposer(composer) {
+    return Boolean(
+      composer?.closest?.('#thread-bottom-container')
+    );
+  }
+
+  function getPaneOverflow(rect, paneRect) {
+    return {
+      leftPx: Math.max(0, paneRect.left - rect.left),
+      rightPx: Math.max(0, rect.right - paneRect.right)
+    };
+  }
+
+  function inspectConversationPosition(paneRect = getVisibleRect(resolveActivePane())) {
+    if (!paneRect) {
+      return { checked: false, ok: true, sampled: 0, leftPx: 0, rightPx: 0 };
+    }
+
+    let sampled = 0;
+    let leftPx = 0;
+    let rightPx = 0;
+
+    const candidates = Array.from(
+      runtime.marked.get(ATTR.turn) || []
+    ).slice(-80);
+
+    for (const element of candidates) {
+      const rect = getVisibleRect(element);
+
+      if (
+        !rect ||
+        rect.bottom <= 0 ||
+        rect.top >= (window.innerHeight || 0)
+      ) {
+        continue;
+      }
+
+      const overflow = getPaneOverflow(rect, paneRect);
+      leftPx = Math.max(leftPx, overflow.leftPx);
+      rightPx = Math.max(rightPx, overflow.rightPx);
+      sampled += 1;
+
+      if (sampled >= 20) break;
+    }
+
+    return {
+      checked: sampled > 0,
+      ok: leftPx <= 4 && rightPx <= 4,
+      sampled,
+      leftPx: Math.round(leftPx * 100) / 100,
+      rightPx: Math.round(rightPx * 100) / 100
+    };
   }
 
   function isWideActive() {
@@ -2143,6 +2278,8 @@
     runtime.lastPaneResizeAt = Date.now();
     runtime.paneResizeCount += 1;
 
+    syncSizedPane();
+
     if (!changed || !runtime.started) {
       return;
     }
@@ -2169,6 +2306,7 @@
       runtime.paneResizeObserver
     ) {
       measureEffectivePane();
+      syncSizedPane();
       return true;
     }
 
@@ -2178,11 +2316,13 @@
 
     if (!pane) {
       measureEffectivePane();
+      restoreSizedPane();
       return false;
     }
 
     runtime.observedPane = pane;
     measureEffectivePane();
+    syncSizedPane();
 
     if (typeof ResizeObserver !== 'function') {
       return false;
@@ -2210,6 +2350,7 @@
   }
 
   function disconnectPaneResizeObserver() {
+    restoreSizedPane();
     runtime.paneResizeObserver?.disconnect();
     runtime.paneResizeObserver = null;
     runtime.observedPane = null;
@@ -4452,11 +4593,15 @@ ${safeMediaCss}
       expected >= 320
     );
 
+    // Work and other independent composers need not match transcript width.
+    // Canonical bottom composers still receive strict width verification.
+    const canonicalComposer = isCanonicalComposer(composer);
     const checks = {
       turn: !shouldVerify || !turn ||
         Math.abs(turnWidth - expected) <= tolerance ||
         turnWidth >= expected * 0.90,
       composer: !shouldVerify || !settings.widenComposer || !composer ||
+        !canonicalComposer ||
         Math.abs(composerWidth - expected) <= tolerance ||
         composerWidth >= expected * 0.90,
       paneBound: !shouldVerify ||
@@ -4472,6 +4617,12 @@ ${safeMediaCss}
       tolerance,
       turnWidth,
       composerWidth,
+      composerMode: !composer
+        ? 'none'
+        : canonicalComposer ? 'canonical' : 'independent',
+      position: shouldVerify
+        ? inspectConversationPosition(paneRect)
+        : { checked: false, ok: true, sampled: 0, leftPx: 0, rightPx: 0 },
       checks
     };
 
@@ -5861,6 +6012,33 @@ ${safeMediaCss}
     );
 
     test(
+      'pane-overflow-measurement',
+      () => {
+        const overflow = getPaneOverflow(
+          { left: 92, right: 1012 },
+          { left: 100, right: 1000 }
+        );
+        return {
+          ok: overflow.leftPx === 8 && overflow.rightPx === 12
+        };
+      }
+    );
+
+    test(
+      'canonical-composer-detection',
+      () => ({
+        ok:
+          isCanonicalComposer({
+            closest: () => ({ id: 'thread-bottom-container' })
+          }) &&
+          !isCanonicalComposer({
+            closest: () => null
+          }) &&
+          !isCanonicalComposer(null)
+      })
+    );
+
+    test(
       'disabled-root-contract',
       () => {
         if (settings.enabled) return { ok: true, skipped: true };
@@ -6168,6 +6346,7 @@ ${safeMediaCss}
         clearManagedMarkers();
         repaired = true;
       }
+      restoreSizedPane();
       repaired = clearRootState() || repaired;
       runtime.invariantFailureStreak = 0;
       runtime.enforcementRetryCount = 0;
@@ -6247,6 +6426,7 @@ ${safeMediaCss}
     }
 
     if (!settings.enabled) {
+      restoreSizedPane();
       clearManagedMarkers();
       clearRootState();
       removeMainStyle();
@@ -6502,6 +6682,7 @@ ${safeMediaCss}
     );
 
     if (!settings.enabled) {
+      restoreSizedPane();
       removeMainStyle();
       clearRootState();
       clearManagedMarkers();
@@ -7782,6 +7963,7 @@ ${safeMediaCss}
     attachPaneResizeObserver();
 
     if (!settings.enabled) {
+      restoreSizedPane();
       removeMainStyle();
       clearRootState();
       clearManagedMarkers();
