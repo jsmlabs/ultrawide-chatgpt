@@ -2,7 +2,7 @@
 
 All notable changes are recorded here. An entry under **Unreleased** is not a published release.
 
-## [2026.10.30.1] - Unreleased candidate
+## [2026.10.30.1] - 2026-10-30 (GitHub integrated; Greasy Fork publication reported)
 
 **Community contribution: [petrt3522](https://greasyfork.org/scripts/557270-ultrawide-chatgpt/discussions/342892)**. Thanks for investigating, iterating on, and sharing the Work, zoom, and layout fixes for integration in the official UltraWide ChatGPT project.
 
@@ -27,11 +27,14 @@ All notable changes are recorded here. An entry under **Unreleased** is not a pu
 - Align Userscript metadata, runtime constant, and internal version to `2026.10.30.1`.
 - Add tests covering safety-pattern checks, versions, pane lifecycle, composer geometry, clipping ownership, and performance.
 
-### Release gates
+### Publication and validation
 
-- **Not published**. The maintainer has inspected **only the visible UI/appearance**. Live functionality, Work CSS offset, fallback alignment, browser-zoom handling, SPA remounts, and other end-to-end behaviors have not been confirmed. Browser-console diagnostic attempts did not establish a working page-context API. Automated CI tests are separate evidence and must not be represented as comprehensive manual testing.
-- Static inspection found no new networking, remote code loading, extra userscript permissions, or dynamic execution primitives; this is not a guarantee against all malicious or faulty behavior.
-- The supplied published and contributor scripts both declare MIT; the GitHub repository declares JSM Custom License v1.1. The license notice discrepancy requires owner review before release.
+- GitHub PR [#4](https://github.com/jsmlabs/ultrawide-chatgpt/pull/4) was squash-merged into `master` at commit [`4cf1025`](https://github.com/jsmlabs/ultrawide-chatgpt/commit/4cf1025b82ad81e9d5f8710dac75062bddd7b8d0).
+- On 2026-10-30 the maintainer **reported publishing** `2026.10.30.1` to [Greasy Fork](https://greasyfork.org/en/scripts/557270-ultrawide-chatgpt). The independently retrieved Greasy Fork listing/version history still showed `2026.10.13.1` at the time of this documentation update; remote version and content parity remain **unverified**.
+- At the exact final PR head `22dc850ab314446b0e39dc11f09857f5fd488e1d`, GitHub Actions passed JavaScript syntax and **10/10 isolated Node regression tests**. This is not evidence of real-world browser behavior.
+- Maintainer browser testing was **limited to visual UI inspection**. The page-console API could not be reached during the available diagnostic attempts. Live functionality, Work CSS, clipping alignment, browser zoom, SPA remounts and end-to-end behavior remain unverified.
+- Static review of the supplied fork detected no new networking, remote code loading, userscript permissions, or dynamic execution primitives. This is not a guarantee against all security or correctness issues.
+- **License notices remain inconsistent:** The owner-provided previously published and fork scripts declared MIT; GitHub currently declares JSM Custom License v1.1. Compare the actual hosted new version and clarify distribution terms without erasing existing rights or contributor attribution.
 
 ## [2026.10.13.1] - Published baseline
 
