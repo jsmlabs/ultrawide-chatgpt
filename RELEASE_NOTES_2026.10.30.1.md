@@ -15,7 +15,9 @@ The `uwc.settings.v14` storage key, settings defaults, and existing GM permissio
 - Full source-to-source review of the provided published version `2026.10.13.1` and contributor fork.
 - No newly introduced network APIs, dynamic code execution, remote dependencies or additional `@grant` entries detected in the supplied fork.
 - CI syntax and isolated Node regression tests: check the **final PR head** for outcomes, not these notes.
-- Live browser validation for ChatGPT Work/Project layouts and clipping **outstanding**.
+- **Maintainer testing scope:** The maintainer reports checking only the **visible user interface / appearance**. This was not a comprehensive functional test, end-to-end validation, or confirmation that Work/Projects, browser zoom, resizing, or cleanup behave correctly.
+- Browser-console checks attempted during review did **not** yield working UltraWide API results (`window.__mlUltraWide` was `undefined` in the page console). No passing live-browser diagnostic result is claimed.
+- Live browser behavior in ChatGPT Work/Project layouts and clipping **remains unverified**.
 - A static audit cannot guarantee the absence of malicious behavior.
 
 ## Known risks and unresolved decisions
@@ -23,6 +25,6 @@ The `uwc.settings.v14` storage key, settings defaults, and existing GM permissio
 1. Native Work CSS offsets and clip translations are tied to the current ChatGPT DOM and may become incompatible after UI changes.
 2. The fork's secondary alignment fallback and self-healing transitions need validation under streaming and rapid sidebar / zoom changes.
 3. The distributed Greasy Fork code declares MIT while repository metadata and LICENSE use JSM Custom License v1.1. Confirm official release licensing and contributor notices.
-4. Do not update the Greasy Fork listing or merge this draft PR until live checks and owner release approval.
+4. Full manual testing was explicitly not completed; publishing in this state would require conscious acceptance of the unverified behavior and an accurate public disclosure. No release, merge, or Greasy Fork update is authorized by this documentation change.
 
 **Release status:** Candidate only. No publication or merge has taken place.
