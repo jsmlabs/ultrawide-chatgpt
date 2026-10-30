@@ -6,7 +6,7 @@
 
 A responsive, configurable **Tampermonkey userscript** that widens ChatGPT conversations and optionally the message composer - without replacing the ChatGPT interface.
 
-[![Version](https://img.shields.io/badge/version-2026.10.13.1-2563eb?style=flat-square)](./script.user.js)
+[![Version](https://img.shields.io/badge/version-2026.10.30.1-2563eb?style=flat-square)](./script.user.js)
 [![Userscript](https://img.shields.io/badge/platform-Tampermonkey-0f766e?style=flat-square)](https://www.tampermonkey.net/)
 [![ChatGPT](https://img.shields.io/badge/target-ChatGPT%20Chat%20%26%20Work-334155?style=flat-square)](https://chatgpt.com/)
 [![License](https://img.shields.io/badge/license-JSM%20Custom%20v1.1-64748b?style=flat-square)](./LICENSE)
@@ -18,7 +18,7 @@ A responsive, configurable **Tampermonkey userscript** that widens ChatGPT conve
 ---
 
 > [!IMPORTANT]
-> **Compatibility:** The published version is `2026.10.13.1`. The contributor-integration branch contains candidate `2026.10.30.1` (unreleased). Current live-browser compatibility with ChatGPT Chat, Work, and split view has **not been independently verified**. ChatGPT's DOM changes over time. See [verification](#-verification-and-limitations) before relying on this customization.
+> **Compatibility:** The latest GitHub source is release candidate `2026.10.30.1`, which has **not** been published to Greasy Fork. The last independently identified Greasy Fork release is `2026.10.13.1`. Current live-browser compatibility with ChatGPT Chat, Work, and split view has **not been independently verified**. ChatGPT's DOM changes over time. See [verification](#-verification-and-limitations) before relying on this customization.
 
 ## ✨ Features
 
@@ -216,9 +216,9 @@ UltraWide is a **single self-contained userscript**, with no application build s
 
 **petrt3522** proposed practical layout and recovery improvements for UltraWide ChatGPT in an [October 29, 2026 Greasy Fork discussion](https://greasyfork.org/scripts/557270-ultrawide-chatgpt/discussions/342892) and offered a [modified script](https://greasyfork.org/en/scripts/602847-ultrawide-chatgpt). Thank you for investigating the issues, sharing the work, and offering to contribute it back to the original project.
 
-The current [integration review PR #4](https://github.com/jsmlabs/ultrawide-chatgpt/pull/4) now integrates the contributor's supplied source with maintainer hardening: pane-relative width, Work-native and fallback clipping alignment, independent composer verification, bounded position diagnostics and repair retries, fresher selector health, lower-overhead monitoring, performance-severity scoring and expanded diagnostics. **The maintainer inspected only the visual interface**, not complete runtime functionality. Browser-console diagnostics did not establish a working page-context UltraWide API in the available session. The Work-specific CSS/translation paths remain unverified in a live browser, so this is still an unreleased draft. CI regression tests are separate from manual browser testing.
+[Integration PR #4](https://github.com/jsmlabs/ultrawide-chatgpt/pull/4) integrates the contributor's supplied source with maintainer hardening: pane-relative width, Work-native and fallback clipping alignment, independent composer verification, bounded position diagnostics and repair retries, fresher selector health, lower-overhead monitoring, performance-severity scoring and expanded diagnostics. **The maintainer inspected only the visual interface**, not complete runtime functionality. Browser-console diagnostics did not establish a working page-context UltraWide API in the available session. The Work-specific CSS/translation paths remain unverified in a live browser, so this is still **unverified in live ChatGPT Work** and not a published Greasy Fork release. CI regression tests are separate from manual browser testing.
 
-**Provenance and verification:** Both full sources were provided directly (published `2026.10.13.1` and petrt3522's version). A source diff and static security audit found no newly introduced networking, external dependencies, dynamic execution or additional userscript permissions. Static review cannot establish malware absence or live compatibility. The review branch contains the contributor's changes with targeted hardening and exact-version metadata consistency; see [draft release notes](./RELEASE_NOTES_2026.10.30.1.md) for the verification boundary.
+**Provenance and verification:** Both full sources were provided directly (published `2026.10.13.1` and petrt3522's version). A source diff and static security audit found no newly introduced networking, external dependencies, dynamic execution or additional userscript permissions. Static review cannot establish malware absence or live compatibility. The integration candidate contains the contributor's changes with targeted hardening and exact-version metadata consistency; see [draft release notes](./RELEASE_NOTES_2026.10.30.1.md) for the verification boundary.
 
 Contributor acknowledgement is retained in source, documentation, and draft release notes. The submitted fork declared MIT, while this repository's original code is distributed under JSM Custom License v1.1; attribution and the distribution license must be reconciled before publication.
 
