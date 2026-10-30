@@ -24,13 +24,13 @@ The `uwc.settings.v14` storage key, settings defaults, and existing GM permissio
 
 1. Native Work CSS offsets and clip translations are tied to the current ChatGPT DOM and may become incompatible after UI changes.
 2. The fork's secondary alignment fallback and self-healing transitions need validation under streaming and rapid sidebar / zoom changes.
-3. The distributed Greasy Fork code declares MIT while repository metadata and LICENSE use JSM Custom License v1.1. Confirm official release licensing and contributor notices.
+3. The older supplied Greasy Fork source and contributor fork declare MIT. The current public Greasy Fork listing and GitHub metadata both state JSM Custom License v1.1. Honor historical grants and contributor attribution; the code bytes and license obligations have not received independent full verification.
 4. The maintainer reports publishing this version despite incomplete manual functional testing; do not interpret publication as proof of Work, zoom, or browser compatibility. No additional deploy, tag, or GitHub Release is authorized by this documentation change.
 
 ## Release and provenance status (2026-10-30)
 
 - **GitHub:** Integrated into `master` by [PR #4](https://github.com/jsmlabs/ultrawide-chatgpt/pull/4), merge commit [`4cf1025`](https://github.com/jsmlabs/ultrawide-chatgpt/commit/4cf1025b82ad81e9d5f8710dac75062bddd7b8d0).
-- **Greasy Fork:** The maintainer reports publication of `2026.10.30.1` on 2026-10-30 at [the official listing](https://greasyfork.org/en/scripts/557270-ultrawide-chatgpt). Independent retrieval of the public listing/code/version history still showed `2026.10.13.1`; the hosted version and byte parity were **not independently verified**.
+- **Greasy Fork:** The maintainer published `2026.10.30.1` on 2026-10-30 at [the official listing](https://greasyfork.org/en/scripts/557270-ultrawide-chatgpt). **The live public listing independently confirms the version, publication date, and `JSM-Custom-1.1` license metadata**. Stale responses from the separate source/history pages prevent verification of exact hosted-code parity with GitHub.
 - **GitHub tag / GitHub Release:** Not created as part of this work.
 - **Contributors:** petrt3522 is credited for the fork and improvements. Thanks for investigating and sharing them.
 
