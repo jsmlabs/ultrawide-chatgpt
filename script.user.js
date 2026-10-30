@@ -20,6 +20,14 @@
   UltraWide ChatGPT
   Version: 2026.10.13.1
 
+  Community acknowledgements
+  - petrt3522: independently proposed pane-width, Work composer, alignment,
+    and recovery improvements on Greasy Fork (October 29, 2026).
+    https://greasyfork.org/scripts/557270-ultrawide-chatgpt/discussions/342892
+  - The current review branch includes maintainer-adapted pane sizing,
+    composer verification, and overflow diagnostics inspired by that proposal.
+    Other fork changes remain pending complete source and live-browser review.
+
   Improvements
   - Updated for the current ChatGPT Chat + Work web surface
   - Safer SPA navigation hooks that do not overwrite hooks installed after UltraWide
@@ -6231,6 +6239,7 @@ ${safeMediaCss}
       return false;
     }
 
+    restoreSizedPane();
     runtime.safeFallbackActive = true;
     runtime.safeFallbackReason = String(
       reason || 'layout-invariant-failure'
@@ -6256,6 +6265,7 @@ ${safeMediaCss}
     runtime.safeFallbackReason = '';
     runtime.invariantFailureStreak = 0;
     setRootState();
+    syncSizedPane();
 
     if (wasActive) {
       pushDebugEvent('safe-fallback-cleared', {
