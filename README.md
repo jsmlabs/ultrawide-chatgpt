@@ -11,14 +11,25 @@ A responsive, configurable **Tampermonkey userscript** that widens ChatGPT conve
 [![ChatGPT](https://img.shields.io/badge/target-ChatGPT%20Chat%20%26%20Work-334155?style=flat-square)](https://chatgpt.com/)
 [![License](https://img.shields.io/badge/license-JSM%20Custom%20v1.1-64748b?style=flat-square)](./LICENSE)
 
-[**Install from GitHub**](https://raw.githubusercontent.com/jsmlabs/ultrawide-chatgpt/master/script.user.js) · [Greasy Fork](https://greasyfork.org/en/scripts/557270-ultrawide-chatgpt) · [Features](#-features) · [Settings](#-configuration) · [Troubleshooting](#-troubleshooting) · [Source](./script.user.js)
+[**Install via Greasy Fork**](https://greasyfork.org/en/scripts/557270-ultrawide-chatgpt) · [GitHub source](./script.user.js) · [Features](#-features) · [Settings](#-configuration) · [Troubleshooting](#-troubleshooting) · [Source](./script.user.js)
 
 </div>
 
 ---
 
 > [!IMPORTANT]
-> **Release and compatibility:** The repository's `master` contains `2026.10.30.1` ([merged PR #4](https://github.com/jsmlabs/ultrawide-chatgpt/pull/4)). The maintainer published this version to [Greasy Fork](https://greasyfork.org/en/scripts/557270-ultrawide-chatgpt) on 2026-10-30. **The public Greasy Fork listing now confirms version `2026.10.30.1` and license `JSM-Custom-1.1`.** Separate code/history retrieval has returned stale data, so the complete hosted source has **not** been compared byte-for-byte with GitHub. Live ChatGPT Work, Projects, zoom, and split-view functionality have not been comprehensively tested. See [verification](#-verification-and-limitations).
+> **Current release:** `2026.10.30.1`, published on [Greasy Fork](https://greasyfork.org/en/scripts/557270-ultrawide-chatgpt) on 30 October 2026 and integrated into GitHub `master` via [PR #4](https://github.com/jsmlabs/ultrawide-chatgpt/pull/4). Public metadata confirms the version and `JSM-Custom-1.1` license. **Exact source-byte parity is unverified** because the separate code/history pages returned older data. Comprehensive real-browser Work, Projects, zoom and split-view testing is also incomplete; see [verification](#-verification-and-limitations).
+
+## ✨ Version 2026.10.30.1
+
+This release integrates **[petrt3522's community improvements](https://greasyfork.org/scripts/557270-ultrawide-chatgpt/discussions/342892)** with maintainer adaptations and attribution.
+
+- **Adaptive sizing:** follows the effective pane across browser zoom and sidebar resizing.
+- **Work and composer alignment:** improves native offsets, clipping handling and independently sized composers.
+- **Bounded recovery:** limits repeated repairs and restores managed inline styles safely.
+- **Performance and diagnostics:** reduces redundant monitoring and adds selector, clipping and repair measurements.
+
+[Full changelog](./CHANGELOG.md) · [Release notes](./RELEASE_NOTES_2026.10.30.1.md) · [Merged PR #4](https://github.com/jsmlabs/ultrawide-chatgpt/pull/4)
 
 ## ✨ Features
 
@@ -39,8 +50,8 @@ A responsive, configurable **Tampermonkey userscript** that widens ChatGPT conve
 
 **Requirements:** A modern browser, [Tampermonkey](https://www.tampermonkey.net/) with the declared `GM_*` APIs enabled, and access to [ChatGPT](https://chatgpt.com/).
 
-1. **[Open the installable userscript](https://raw.githubusercontent.com/jsmlabs/ultrawide-chatgpt/master/script.user.js)**. Review the source and permissions, then approve the Tampermonkey installation prompt.
-2. If your browser does not offer installation, open [`script.user.js`](./script.user.js), copy its complete contents, and create a new userscript in Tampermonkey. Preserve the `// ==UserScript==` metadata block.
+1. **[Install the current version from Greasy Fork](https://greasyfork.org/en/scripts/557270-ultrawide-chatgpt)**. Review the source and permissions, then approve installation in Tampermonkey.
+2. If automatic installation is unavailable, open [`script.user.js`](./script.user.js), copy its complete contents, and create a new Tampermonkey userscript. Preserve the `// ==UserScript==` metadata block.
 3. Open or refresh **[chatgpt.com](https://chatgpt.com/)**.
 4. Use the Tampermonkey **UltraWide ChatGPT** menu, or press **`Alt+S`** with focus outside the message editor, to open settings.
 
@@ -165,13 +176,13 @@ For a reproducible issue, capture the script version, browser, userscript manage
 
 | Evidence | Status | Scope |
 | --- | --- | --- |
-| Historical `node --check` | Previously reported as passed | JavaScript parsing of earlier version |
-| Historical built-in regression suite | **20 passed, 0 failed** | Synthetic DOM, version `2026.10.12.2` |
-| GitHub `2026.10.30.1` | **10/10 Node tests and syntax passed on PR head** [`22dc850`](https://github.com/jsmlabs/ultrawide-chatgpt/commit/22dc850ab314446b0e39dc11f09857f5fd488e1d) | Isolated geometry, safety-pattern, and performance contracts; not a live-browser test |
-| Live ChatGPT / Work / split view | **Unverified** | Requires real-browser validation |
-| Performance and resource usage | **Unverified** | Requires measurements on target browsers |
+| Automated PR CI | **10/10 Node tests passed; syntax passed** | Exact [tested source head `22dc850`](https://github.com/jsmlabs/ultrawide-chatgpt/commit/22dc850ab314446b0e39dc11f09857f5fd488e1d); isolated contracts only |
+| GitHub `master` | **Merged** | [PR #4](https://github.com/jsmlabs/ultrawide-chatgpt/pull/4) integrated the tested userscript unchanged |
+| Greasy Fork | **Version and license confirmed** | `2026.10.30.1` / `JSM-Custom-1.1`; hosted-source byte parity remains unverified |
+| Maintainer manual review | **Visual UI inspection only** | No comprehensive browser functional tests |
+| ChatGPT Work / Projects / zoom / split view | **Unverified** | Requires live compatibility and performance checks |
 
-The prior synthetic test results must **not** be interpreted as validation of version `2026.10.13.1` or of live ChatGPT compatibility. Node.js tests now exercise pane-width, position, composer, CSS cleanup, contributor integration, security-pattern, and performance contracts in isolation. These checks do not validate the live ChatGPT DOM or its split-view behavior. Check CI results for the exact revision before treating them as passing.
+The automated tests exercise isolated pane sizing, composer, clipping, CSS cleanup, security-pattern and performance contracts. **They do not prove real-browser compatibility or absence of malicious behavior.** During manual review, `window.__mlUltraWide` was `undefined` in the page console; this did not establish whether a sandboxing restriction, extension configuration or runtime failure caused it.
 
 To check JavaScript syntax locally, after obtaining the repository:
 
@@ -210,13 +221,13 @@ ChatGPT navigation / DOM / pane resize
 
 UltraWide is a **single self-contained userscript**, with no application build step. It uses targeted layout rules and markers, ChatGPT thread-width variables where available, and bounded observation/reconciliation to handle supported DOM changes. Detection and split-view classification are heuristic; they cannot guarantee compatibility with future interface revisions. The userscript runs in the browser and does not replace or proxy the ChatGPT service.
 
-**Repository files:** [`script.user.js`](./script.user.js) · [`README.md`](./README.md) · [`LICENSE`](./LICENSE)
+**Repository files:** [`script.user.js`](./script.user.js) · [`CHANGELOG.md`](./CHANGELOG.md) · [`Release notes`](./RELEASE_NOTES_2026.10.30.1.md) · [`Tests`](./tests) · [`CI`](./.github/workflows/userscript-validation.yml) · [`LICENSE`](./LICENSE)
 
 ## 🤝 Community contributions
 
 **petrt3522** proposed practical layout and recovery improvements for UltraWide ChatGPT in an [October 29, 2026 Greasy Fork discussion](https://greasyfork.org/scripts/557270-ultrawide-chatgpt/discussions/342892) and offered a [modified script](https://greasyfork.org/en/scripts/602847-ultrawide-chatgpt). Thank you for investigating the issues, sharing the work, and offering to contribute it back to the original project.
 
-[Merged integration PR #4](https://github.com/jsmlabs/ultrawide-chatgpt/pull/4) integrated the contributor's supplied source with maintainer hardening: pane-relative width, Work-native and fallback clipping alignment, independent composer verification, bounded position diagnostics and repair retries, fresher selector health, lower-overhead monitoring, performance-severity scoring and expanded diagnostics. **The maintainer inspected only the visual interface**, not complete runtime functionality. Browser-console diagnostics did not establish a working page-context UltraWide API in the available session. The Work-specific CSS/translation paths remain unverified in a live browser. The Greasy Fork listing confirms the release version; byte-for-byte hosted-code parity with GitHub remains unverified. Automated CI is separate from manual browser testing.
+[Merged PR #4](https://github.com/jsmlabs/ultrawide-chatgpt/pull/4) integrates the contributor's pane-relative sizing, Work and composer handling, clipping diagnostics, bounded recovery, selector-health improvements, and performance optimizations. The maintainer adapted the code to retain existing settings and cleanup contracts. The exact [testing limits](#-verification-and-limitations) remain visible; attribution is preserved in code and release documentation.
 
 **Provenance and verification:** Both full sources were provided directly (published `2026.10.13.1` and petrt3522's version). A source diff and static security audit found no newly introduced networking, external dependencies, dynamic execution or additional userscript permissions. Static review cannot establish malware absence or live compatibility. The merged GitHub source contains the contributor's changes with targeted hardening and version metadata consistency; see [release notes](./RELEASE_NOTES_2026.10.30.1.md) for the verification boundary.
 
@@ -234,6 +245,6 @@ Created by **jsmdev**. This independent project is **not affiliated with or endo
 
 **A wider workspace for ChatGPT.**
 
-[Install](https://raw.githubusercontent.com/jsmlabs/ultrawide-chatgpt/master/script.user.js) · [Settings](#-configuration) · [Troubleshooting](#-troubleshooting) · [Back to top](#-ultrawide-chatgpt)
+[Install](https://greasyfork.org/en/scripts/557270-ultrawide-chatgpt) · [Source](./script.user.js) · [Changelog](./CHANGELOG.md) · [Back to top](#-ultrawide-chatgpt)
 
 </div>
