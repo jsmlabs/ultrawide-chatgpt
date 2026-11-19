@@ -21,7 +21,7 @@ test('userscript candidate metadata and runtime versions agree', () => {
   const runtime = source.match(/const VERSION = '([^']+)'/);
   assert.ok(meta && runtime);
   assert.equal(meta[1], runtime[1]);
-  assert.equal(meta[1], '2026.10.30.1');
+  assert.match(meta[1], /^\d{4}\.\d{2}\.\d{2}\.\d+$/);
   assert.match(source, /petrt3522/);
 });
 

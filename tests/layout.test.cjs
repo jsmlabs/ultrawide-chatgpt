@@ -178,3 +178,152 @@ test('independent composers are exempt from transcript-width equality', () => {
   assert.equal(canonical.checks.composer, false);
   assert.equal(canonical.ok, false);
 });
+
+test('active pane discovery prefers a visible chat anchor over an unrelated main', () => {
+  const unrelated = { closest: () => null, querySelectorAll: () => [] };
+  const pane = { closest: () => null };
+  const dialog = {};
+  const overlayInput = { closest: () => dialog };
+  const prompt = { closest: selector => selector === 'main,[role="main"]' ? pane : null };
+  const context = vm.createContext({
+    SELECTOR: { excludedComposerAncestor: '[role="dialog"]' },
+    PRIMARY_COMPOSER_INPUT: 'primary',
+    document: {
+      querySelectorAll(selector) {
+        if (selector === 'primary') return [overlayInput, prompt];
+        if (selector === 'main,[role="main"]') return [unrelated];
+        return [];
+      }
+    },
+    isVisibleElement: element => Boolean(element)
+  });
+  vm.runInContext(extractFunction('resolveActivePane'), context);
+  assert.equal(context.resolveActivePane(), pane);
+  context.document.querySelectorAll = selector => selector === 'main,[role="main"]' ? [unrelated] : [];
+  assert.equal(context.resolveActivePane(), null);
+});
+
+test('turn discovery falls back within the active pane when preferred matches are in an overlay', () => {
+  const dialogTurn = { closest: () => ({}) };
+  const article = {};
+  const message = { closest: selector => selector === 'article' ? article : null };
+  const pane = {
+    contains: node => node === article,
+    querySelectorAll: selector => selector === 'preferred' ? [dialogTurn] : [message]
+  };
+  const context = vm.createContext({
+    SELECTOR: { preferredTurns: 'preferred', fallbackMessages: 'fallback', excludedComposerAncestor: 'overlays' },
+    runtime: {},
+    isConnectedElement: element => Boolean(element)
+  });
+  vm.runInContext(extractFunction('queryConversationTurns'), context);
+  assert.deepEqual(Array.from(context.queryConversationTurns(pane)), [article]);
+});
+
+test('a focused side form does not displace the active pane composer', () => {
+  const prompt = {
+    id: 'prompt-textarea',
+    matches: () => true,
+    closest: () => null,
+    getBoundingClientRect: () => ({ bottom: 700 })
+  };
+  const sideInput = {
+    matches: () => false,
+    closest: () => null,
+    getBoundingClientRect: () => ({ bottom: 850 })
+  };
+  const pane = { querySelectorAll: selector => selector === 'primary' ? [prompt] : [prompt, sideInput] };
+  const context = vm.createContext({
+    PRIMARY_COMPOSER_INPUT: 'primary',
+    COMPOSER_INPUT_TEST_IDS: 'test-ids',
+    SELECTOR: { composerInput: 'input', excludedComposerAncestor: 'overlays', preferredTurns: 'turn', fallbackMessages: 'message' },
+    CONFIG: { maxComposerCandidates: 24 },
+    document: { activeElement: sideInput },
+    isConnectedElement: () => true,
+    isVisibleElement: () => true,
+    window: { innerHeight: 900 }
+  });
+  vm.runInContext(extractFunction('findComposerInput'), context);
+  assert.equal(context.findComposerInput(pane), prompt);
+  prompt.closest = selector => selector === 'overlays,turn,message' ? {} : null;
+  assert.equal(context.findComposerInput(pane), sideInput);
+});
+
+test('only a visible editor outside dialogs and conversation turns triggers split-view mode', () => {
+  const inlineEditor = { closest: () => ({}) };
+  const panel = { closest: () => null };
+  const editors = [inlineEditor];
+  const context = vm.createContext({
+    SELECTOR: { splitViewIndicators: 'editor', preferredTurns: 'turn', fallbackMessages: 'message' },
+    runtime: {},
+    document: { querySelectorAll: () => editors },
+    isVisibleElement: () => true
+  });
+  vm.runInContext(extractFunction('detectCanvas'), context);
+  assert.equal(context.detectCanvas(), false);
+  editors.push(panel);
+  assert.equal(context.detectCanvas(), true);
+});
+
+test('pane resize ignores stale observers and measures the current pane consistently', () => {
+  const activePane = { rect: { width: 1216, height: 720 } };
+  const resized = [];
+  const runtime = { observedPane: activePane, paneResizeCount: 0, started: false };
+  const context = vm.createContext({
+    runtime,
+    getVisibleRect: pane => pane.rect,
+    syncSizedPane: (_pane, width) => resized.push(width),
+    scheduleClipAlignment() {}
+  });
+  vm.runInContext(extractFunction('onPaneResize'), context);
+  context.onPaneResize([{ target: {}, contentRect: { width: 500, height: 700 } }]);
+  assert.equal(runtime.paneResizeCount, 0);
+  context.onPaneResize([{ target: activePane, contentRect: { width: 1200, height: 700 } }]);
+  assert.deepEqual(resized, [1216]);
+  assert.equal(runtime.effectivePaneHeight, 720);
+});
+
+test('a partial scan rebuilds layout markers when the active pane changes', () => {
+  const oldPane = {};
+  const newPane = {};
+  const runtime = { marked: new Map([['pane', new Set([oldPane])]]) };
+  const scans = [];
+  const DIRTY = { root: 'root', split: 'split', conversation: 'conversation', composer: 'composer', notice: 'notice' };
+  const noop = () => {};
+  const context = vm.createContext({
+    runtime, DIRTY, ATTR: { pane: 'pane' }, settings: { enabled: true },
+    ALL_DIRTY_REGIONS: Object.values(DIRTY),
+    shouldPauseWork: () => false,
+    nowMs: () => 0,
+    resolveActivePane: () => newPane,
+    attachPaneResizeObserver: pane => assert.equal(pane, newPane),
+    createDesiredMarkers: () => new Map(),
+    seedDesiredMarkers: noop,
+    addDesiredMarker: (desired, attr, pane) => desired.set(attr, new Set([pane])),
+    detectCanvas: () => scans.push('split'),
+    markConversation: (_desired, pane) => { assert.equal(pane, newPane); scans.push('conversation'); },
+    markComposer: (_desired, pane) => { assert.equal(pane, newPane); scans.push('composer'); },
+    markPlanNotice: (_desired, pane) => { assert.equal(pane, newPane); scans.push('notice'); },
+    applyMarkerDiff: desired => { runtime.marked = desired; },
+    detectDomCapabilities: noop,
+    evaluateCompatibility: noop,
+    setRootState: noop,
+    pushDebugEvent: noop,
+    updateDomFingerprint: noop,
+    scheduleClipAlignment: noop,
+    scheduleComposerScrollGuardAudit: noop,
+    verifyAppliedWidths: noop,
+    evaluateLayoutInvariants: () => ({ ok: true }),
+    processInvariantResult: noop,
+    syncDebugOverlay: noop,
+    recordPerformanceSample: noop
+  });
+  vm.runInContext(extractFunction('performScan'), context);
+  context.performScan([DIRTY.root]);
+  assert.equal(runtime.lastError, null);
+  assert.deepEqual(scans, ['split', 'conversation', 'composer', 'notice']);
+  assert.deepEqual(Array.from(runtime.marked.get('pane')), [newPane]);
+  scans.length = 0;
+  context.performScan([DIRTY.root]);
+  assert.deepEqual(scans, []);
+});

@@ -6,7 +6,7 @@
 
 A responsive, configurable **Tampermonkey userscript** that widens ChatGPT conversations and optionally the message composer - without replacing the ChatGPT interface.
 
-[![Version](https://img.shields.io/badge/version-2026.10.30.1-2563eb?style=flat-square)](./script.user.js)
+[![Version](https://img.shields.io/badge/version-2026.11.19.9-2563eb?style=flat-square)](./script.user.js)
 [![Userscript](https://img.shields.io/badge/platform-Tampermonkey-0f766e?style=flat-square)](https://www.tampermonkey.net/)
 [![ChatGPT](https://img.shields.io/badge/target-ChatGPT%20Chat%20%26%20Work-334155?style=flat-square)](https://chatgpt.com/)
 [![License](https://img.shields.io/badge/license-JSM%20Custom%20v1.1-64748b?style=flat-square)](./LICENSE)
@@ -17,19 +17,14 @@ A responsive, configurable **Tampermonkey userscript** that widens ChatGPT conve
 
 ---
 
-> [!IMPORTANT]
-> **Current release:** `2026.10.30.1`, published on [Greasy Fork](https://greasyfork.org/en/scripts/557270-ultrawide-chatgpt) on 30 October 2026 and integrated into GitHub `master` via [PR #4](https://github.com/jsmlabs/ultrawide-chatgpt/pull/4). Public metadata confirms the version and `JSM-Custom-1.1` license. **Exact source-byte parity is unverified** because the separate code/history pages returned older data. Comprehensive real-browser Work, Projects, zoom and split-view testing is also incomplete; see [verification](#-verification-and-limitations).
+## Version 2026.11.19.9
 
-## ✨ Version 2026.10.30.1
+- Restores readable structured tables in Work and keeps wide data scrollable inside the widget.
+- Scopes width and alignment to the active chat pane, including pane remounts without a URL change.
+- Addresses horizontal overflow beneath the Work composer and recovers clipped or off-screen `@` suggestion menus.
+- Adds composer and menu geometry diagnostics through the existing DevTools API, using `unsafeWindow` where supported and a DOM-event fallback.
 
-This release integrates **[petrt3522's community improvements](https://greasyfork.org/scripts/557270-ultrawide-chatgpt/discussions/342892)** with maintainer adaptations and attribution.
-
-- **Adaptive sizing:** follows the effective pane across browser zoom and sidebar resizing.
-- **Work and composer alignment:** improves native offsets, clipping handling and independently sized composers.
-- **Bounded recovery:** limits repeated repairs and restores managed inline styles safely.
-- **Performance and diagnostics:** reduces redundant monitoring and adds selector, clipping and repair measurements.
-
-[Full changelog](./CHANGELOG.md) · [Release notes](./RELEASE_NOTES_2026.10.30.1.md) · [Merged PR #4](https://github.com/jsmlabs/ultrawide-chatgpt/pull/4)
+Thanks to [petrt3522](https://greasyfork.org/scripts/557270-ultrawide-chatgpt/discussions/344206) for reporting the Work table issue and sharing a fix. See the [changelog](./CHANGELOG.md) for release history.
 
 ## ✨ Features
 
@@ -175,15 +170,7 @@ For a reproducible issue, capture the script version, browser, userscript manage
 
 ## 🧪 Verification and limitations
 
-| Evidence | Status | Scope |
-| --- | --- | --- |
-| Automated PR CI | **10/10 Node tests passed; syntax passed** | Exact [tested source head `22dc850`](https://github.com/jsmlabs/ultrawide-chatgpt/commit/22dc850ab314446b0e39dc11f09857f5fd488e1d); isolated contracts only |
-| GitHub `master` | **Merged** | [PR #4](https://github.com/jsmlabs/ultrawide-chatgpt/pull/4) integrated the tested userscript unchanged |
-| Greasy Fork | **Version and license confirmed** | `2026.10.30.1` / `JSM-Custom-1.1`; hosted-source byte parity remains unverified |
-| Maintainer manual review | **Visual UI inspection only** | No comprehensive browser functional tests |
-| ChatGPT Work / Projects / zoom / split view | **Unverified** | Requires live compatibility and performance checks |
-
-The automated tests exercise isolated pane sizing, composer, clipping, CSS cleanup, security-pattern and performance contracts. **They do not prove real-browser compatibility or absence of malicious behavior.** During manual review, `window.__mlUltraWide` was `undefined` in the page console; this did not establish whether a sandboxing restriction, extension configuration or runtime failure caused it.
+The syntax check and 16 isolated Node tests cover pane sizing and remounts, composer selection, split-view detection, clipping cleanup, and performance contracts. Live behavior across ChatGPT Work, Projects, zoom, and split-view variants still requires browser verification.
 
 To check JavaScript syntax locally, after obtaining the repository:
 

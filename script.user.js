@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         UltraWide ChatGPT
 // @namespace    https://www.instagram.com/jsm.ig/
-// @version      2026.10.30.1
+// @version      2026.11.19.9
 // @author       jsmdev
-// @description  UltraWide ChatGPT with pane-relative clipping-container alignment for browser zoom and sidebar changes, and bounded Work composer reconciliation to prevent flicker.
+// @description  UltraWide ChatGPT with pane-relative sizing, scoped @-menu recovery, and conservative composer overflow protection.
 // @license      JSM-Custom-1.1
 // @match        https://chatgpt.com/*
 // @match        https://www.chatgpt.com/*
@@ -14,11 +14,12 @@
 // @grant        GM_setValue
 // @grant        GM_registerMenuCommand
 // @grant        GM_unregisterMenuCommand
+// @grant        unsafeWindow
 // ==/UserScript==
- 
+
 /*
   UltraWide ChatGPT
-  Version: 2026.10.30.1
+  Version: 2026.11.19.9
   --------------------------------------------------------------------------
   Community contribution: petrt3522 (Greasy Fork, October 29, 2026)
   https://greasyfork.org/scripts/557270-ultrawide-chatgpt/discussions/342892
@@ -26,6 +27,73 @@
   for investigating, documenting and sharing the original improvements.
   Fork modifications supplied with the MIT license statement; preserve
   attribution and consult repository LICENSE for official distribution terms.
+
+  November 19, 2026 - Four-pass stability audit
+  --------------------------------------------------------------------------
+  - Select the @ suggestion menu by input geometry rather than document order.
+  - Support collapsed 0-height menus without capturing hidden menus elsewhere.
+  - Limit ancestor unclipping to elements that actually intersect placement.
+  - Never mistake generic thin UI elements for horizontal scrollbars.
+  - Guard only empty native scroll tracks; preserve real horizontal scrolling.
+  - Extend browser regression coverage for menu selection and cleanup.
+
+  November 19, 2026 - Sixth fix: targeted @-suggestion popup recovery
+  --------------------------------------------------------------------------
+  - Identify the actual suggestionMenu/composer-home-top-menu component;
+    its lower rounded edge can resemble a horizontal scrollbar when clipped.
+  - Correct only off-screen, misplaced or ancestor-clipped @-suggestion menus.
+  - Preserve normal menu placement, vertical list scrolling, item clicks,
+    focus, the Work composer, and transcript width.
+  - Restore original inline properties on close, stop and disable.
+  - Extend read-only diagnostics with suggestion-popup geometry and repairs.
+
+  November 19, 2026 - Fifth fix: native scrollbar and DOM hit-testing
+  --------------------------------------------------------------------------
+  - Handle the observed case where @ is active, but the old diagnostic reports
+    zero guarded scrollports and zero visual scrollbar elements.
+  - While an @ mention is active, suppress native horizontal scrollbar tracks
+    in bounded composer-only scopes without disabling horizontal scrolling.
+  - Extend element detection with sampled hit-testing directly beneath the
+    composer, including elements with data-testid outside its wrapper subtree.
+  - Preserve visible suggestion menus, dialogs, buttons and text editors.
+  - Expose elementFromPoint/ancestor geometry in the CSP-safe diagnostic bridge;
+    all temporary attributes are restored on input clear, stop, and disable.
+
+  November 19, 2026 - Fourth fix: visible mention bar and diagnostics
+  --------------------------------------------------------------------------
+  - Detect a thin, full-width, textless horizontal bar rendered immediately
+    beneath an active @-mention composer, even when it is not scrollable and
+    has no scrollbar role or standard overflow class.
+  - Bound candidate discovery to the local composer and adjacent siblings;
+    never scan or clip the transcript, mention popup, input, or other editors.
+  - Retain intentionally hidden bar markers while mention input remains
+    active; cleanly remove all guards on input change, disable, and stop.
+  - Publish the console API via unsafeWindow when available. Keep the
+    existing private script API and offer a CSP-safe DOM-event fallback.
+  - Return actionable read-only geometry for DOM diagnosis.
+
+  November 19, 2026 - Third fix: inner and subpixel scrollports
+  --------------------------------------------------------------------------
+  - Check every narrow composer ancestor, including form and input wrappers.
+  - Detect 1px overflow and overflow-x:scroll even with no excess width.
+  - Include scoped narrow horizontal scrollbar widgets beside the composer.
+  - Keep editors, mention popups, transcript, and full-page scrolling intact.
+  - Expose composerOverflow() for read-only live DOM diagnostics.
+
+  November 19, 2026 - Follow-up: mention-triggered composer scrollbar
+  --------------------------------------------------------------------------
+  - Contain overflow in the actual narrow parent scrollport, not just the form.
+  - Re-audit after @-mention input/React updates without scanning the page.
+  - Do not clip popovers or other composer surfaces without an overflow fault.
+  - Restore temporary guards on disable, navigation, and shutdown.
+  - Fix a later canonical-composer rule overriding the local width bound.
+
+  November 19, 2026 - Work composer horizontal overflow correction
+  --------------------------------------------------------------------------
+  - Keep the inherited thread width within the actual composer container.
+  - Prevent a horizontal scrollbar under the independent Work composer.
+  - Preserve wide transcript sizing, standard composer sizing and text inputs.
+  - Add a focused CSS regression contract for the composer boundary.
 
   Retained community improvements vs. original 2026.10.13.1
   --------------------------------------------------------------------------
@@ -53,9 +121,9 @@
   - Expands diagnostics for pane/clipping geometry, alignment mode, Work
     composer handling, repair-loop safeguards, and performance measurements.
   - Omits upstream auto-update URLs to protect this local compatibility fork.
- 
+
   Original author changelog (2026.10.13.1) follows unchanged below.
- 
+
   Improvements
   - Updated for the current ChatGPT Chat + Work web surface
   - Safer SPA navigation hooks that do not overwrite hooks installed after UltraWide
@@ -158,7 +226,7 @@
   - Renders the debug overlay without innerHTML for Trusted Types compatibility
   - Restores immediate observer initialization at document-start before root creation
   - Avoids reloading away unsaved settings when persistent storage fails
- 
+
   Shortcuts
   - Alt+O  Enable/disable script
   - Alt+U  Enable/disable UltraWide
@@ -168,16 +236,20 @@
   - Alt+C  Enable/disable split-view safe mode
   - Alt+S  Open settings
   - Alt+R  Reset settings
- 
+
   Low-power mode (enabled by default)
   - Coalesces structural scans and avoids rescanning streamed message content
   - Limits routine repair/polling while retaining immediate DOM structural checks
   - Full diagnostics and manual repair remain available
- 
+
   Console API
   - window.__mlUltraWide.state()
   - window.__mlUltraWide.diagnostics()
   - window.__mlUltraWide.capabilities()
+  - window.__mlUltraWide.composerOverflow()
+  - fallback (when page API is isolated):
+    document.dispatchEvent(new Event('uwc:composer-debug'));
+    JSON.parse(document.documentElement.getAttribute('data-uwc-composer-debug'));
   - window.__mlUltraWide.verify()
   - window.__mlUltraWide.selfTest()
   - window.__mlUltraWide.regressionTest()
@@ -206,14 +278,14 @@
   - window.__mlUltraWide.set({ cap: "2400", auto: false })
   - window.__mlUltraWide.reset()
 */
- 
+
 (() => {
   'use strict';
- 
-  const VERSION = '2026.10.30.1';
+
+  const VERSION = '2026.11.19.9';
   const PRODUCT_NAME = 'UltraWide ChatGPT';
   const STORAGE_KEY = 'uwc.settings.v14';
- 
+
   const ID = Object.freeze({
     style: 'uwc-style-v11',
     uiStyle: 'uwc-ui-style-v11',
@@ -221,7 +293,7 @@
     modal: 'uwc-settings-v11',
     debugOverlay: 'uwc-debug-overlay-v11'
   });
- 
+
   const LEGACY_STYLE_IDS = Object.freeze([
     'uwc-style',
     'uwc-ui-style',
@@ -232,7 +304,7 @@
     'uwc-style-v10',
     'uwc-ui-style-v10'
   ]);
- 
+
   const LEGACY_ELEMENT_IDS = Object.freeze([
     'uwc-toast',
     'uwc-settings-modal',
@@ -243,7 +315,7 @@
     'uwc-toast-v10',
     'uwc-settings-v10'
   ]);
- 
+
   const LEGACY_STORAGE_KEYS = Object.freeze([
     'uwc.settings.v13',
     'uwc.settings.v12',
@@ -259,7 +331,7 @@
     'uwc.settings.v2',
     'uwc.settings.v1'
   ]);
- 
+
   const ATTR = Object.freeze({
     enabled: 'data-uwc-enabled',
     wide: 'data-uwc-wide',
@@ -267,20 +339,22 @@
     canvas: 'data-uwc-canvas',
     cap: 'data-uwc-cap',
     version: 'data-uwc-version',
- 
+    pane: 'data-uwc-pane',
+
     conversationRoot: 'data-uwc-conversation-root',
     conversationPath: 'data-uwc-conversation-path',
     turn: 'data-uwc-turn',
     turnPath: 'data-uwc-turn-path',
- 
+
     composer: 'data-uwc-composer',
     composerPath: 'data-uwc-composer-path',
- 
+
     planNotice: 'data-uwc-plan-notice',
     planNoticePath: 'data-uwc-plan-notice-path'
   });
- 
+
   const MANAGED_MARKERS = Object.freeze([
+    ATTR.pane,
     ATTR.conversationRoot,
     ATTR.conversationPath,
     ATTR.turn,
@@ -290,7 +364,7 @@
     ATTR.planNotice,
     ATTR.planNoticePath
   ]);
- 
+
   const CAPS = Object.freeze([
     'none',
     '1200',
@@ -305,55 +379,55 @@
     '3600',
     '4200'
   ]);
- 
+
   const DEFAULTS = Object.freeze({
     enabled: true,
     wide: true,
     left: true,
- 
+
     cap: 'none',
     auto: true,
     autoMinWidth: 1100,
     disableOnTouch: false,
     disableBelowHeight: 560,
- 
+
     gutterMin: 16,
     gutterVw: 2,
     gutterMax: 36,
- 
+
     widenComposer: true,
     safeMedia: true,
     canvasSafeMode: true,
- 
+
     toast: true,
     toastMs: 1500,
- 
+
     scanDebounceMs: 240,
     repairIntervalMs: 10000,
     routePollMs: 10000,
     lowPowerMode: true,
- 
+
     pauseWhenHidden: true,
     performanceTelemetry: true,
     debugOverlay: false,
- 
+
     closeSettingsOnBackdrop: true
   });
- 
+
   const LIMITS = Object.freeze({
     autoMinWidth: [640, 10000],
     disableBelowHeight: [0, 4000],
- 
+
     gutterMin: [0, 100],
     gutterVw: [0, 15],
     gutterMax: [0, 200],
- 
+
     toastMs: [300, 10000],
     scanDebounceMs: [80, 3000],
     repairIntervalMs: [2500, 60000],
     routePollMs: [1000, 30000]
   });
- 
+
   const CONFIG = Object.freeze({
     maxMutationRecords: 24,
     maxMutationNodes: 10,
@@ -406,7 +480,13 @@
       ...MANAGED_MARKERS
     ])
   });
- 
+
+  const COMPOSER_INPUT_TEST_IDS = [
+    '[data-testid="prompt-textarea"]',
+    '[data-testid="composer-input"]',
+    '[data-testid="composer:input"]'
+  ].join(',');
+  const PRIMARY_COMPOSER_INPUT = `#prompt-textarea,${COMPOSER_INPUT_TEST_IDS}`;
   const SELECTOR = Object.freeze({
     preferredTurns: [
       '[data-turn-key]',
@@ -416,7 +496,7 @@
       'article[data-testid="conversation-turn"]',
       'article[data-testid^="conversation-turn-"]'
     ].join(','),
- 
+
     fallbackMessages: [
       '[data-message-author-role]',
       '[data-message-id][data-message-author-role]',
@@ -424,7 +504,7 @@
       '[data-user-message-bubble="true"]',
       '[data-conversation-role="assistant"]'
     ].join(','),
- 
+
     main: [
       'main',
       '[role="main"]',
@@ -435,19 +515,16 @@
       '[data-testid="conversation"]',
       '[data-testid="thread"]'
     ].join(','),
- 
+
     composerInput: [
-      '#prompt-textarea',
-      '[data-testid="prompt-textarea"]',
-      '[data-testid="composer-input"]',
-      '[data-testid="composer:input"]',
+      PRIMARY_COMPOSER_INPUT,
       'form[data-type="unified-composer"] textarea',
       'form[data-type="unified-composer"] [contenteditable="true"]',
       'form[data-type="unified-composer"] [role="textbox"]',
-      'main form textarea',
-      'main form [contenteditable="true"][role="textbox"]'
+      ':is(main,[role="main"]) form textarea',
+      ':is(main,[role="main"]) form [contenteditable="true"][role="textbox"]'
     ].join(','),
- 
+
     composerShell: [
       '#thread-bottom-container',
       '#thread-bottom',
@@ -456,7 +533,7 @@
       '[data-testid="composer-container"]',
       'form[data-type="unified-composer"]'
     ].join(','),
- 
+
     excludedComposerAncestor: [
       '#uwc-settings-v11',
       '#uwc-settings-v10',
@@ -466,11 +543,15 @@
       '[data-testid^="artifact-"]',
       '[data-testid="code-editor"]',
       '[data-testid^="code-editor-"]',
+      '[data-testid="document-editor"]',
+      '[data-testid^="document-editor-"]',
+      '[data-testid="spreadsheet-editor"]',
+      '[data-testid^="spreadsheet-editor-"]',
       '.monaco-editor',
       '.cm-editor',
       '.CodeMirror'
     ].join(','),
- 
+
     splitViewIndicators: [
       '[data-testid="canvas"]',
       '[data-testid^="canvas-"]',
@@ -488,14 +569,14 @@
       '.cm-editor',
       '.CodeMirror'
     ].join(','),
- 
+
     structuralRoots: [
       '[data-thread-user-message-navigation-content]',
       '[data-thread-find-target="conversation"]',
       '#thread-bottom-container',
       '#prompt-textarea'
     ].join(','),
- 
+
     turnContent: [
       '[data-markdown-text-style="assistant-message"]',
       '[data-user-message-bubble="true"]',
@@ -504,7 +585,7 @@
       '[data-message-author-role]'
     ].join(',')
   });
- 
+
   const SELECTOR_HEALTH_TARGETS = Object.freeze([
     Object.freeze({
       id: 'main',
@@ -555,20 +636,20 @@
       group: 'structural'
     })
   ]);
- 
+
   const PERFORMANCE_BUDGET = Object.freeze({
     watchdog: 1,
     reconcile: 2,
     fullScan: 8,
     selfTest: 20
   });
- 
+
   // A 1.1ms watchdog and a 28ms watchdog must not be treated as equally bad.
   // The raw original-author budget thresholds remain visible in diagnostics.
   // One frame (16ms) of *average excess* per background operation is the
   // severity scale for the user-facing performance-health score.
   const PERFORMANCE_SCORE_EXCESS_SCALE_MS = 16;
- 
+
   function performanceScoreFromExcess(excessMs, samples) {
     const count = Math.max(0, Number(samples) || 0);
     if (!count) return 100; // No measured violation evidence yet.
@@ -577,11 +658,11 @@
       100 * (1 - averageExcess / PERFORMANCE_SCORE_EXCESS_SCALE_MS)
     )));
   }
- 
+
   const MANAGED_LAYOUT_SELECTOR = MANAGED_MARKERS
     .map((attribute) => `[${attribute}]`)
     .join(',');
- 
+
   const SCAN_TRIGGER_SELECTOR = [
     SELECTOR.preferredTurns,
     SELECTOR.fallbackMessages,
@@ -589,7 +670,7 @@
     SELECTOR.splitViewIndicators,
     SELECTOR.structuralRoots
   ].join(',');
- 
+
   const DIRTY = Object.freeze({
     conversation: 'conversation',
     composer: 'composer',
@@ -597,7 +678,7 @@
     split: 'split',
     root: 'root'
   });
- 
+
   const ALL_DIRTY_REGIONS = Object.freeze([
     DIRTY.conversation,
     DIRTY.composer,
@@ -605,7 +686,7 @@
     DIRTY.split,
     DIRTY.root
   ]);
- 
+
   const FAILURE_CODE = Object.freeze({
     RUNTIME_NOT_STARTED: 'RUNTIME_NOT_STARTED',
     MAIN_STYLE_MISSING: 'MAIN_STYLE_MISSING',
@@ -627,7 +708,7 @@
     RECONCILIATION_STALLED: 'RECONCILIATION_STALLED',
     RECONCILIATION_DID_NOT_CONVERGE: 'RECONCILIATION_DID_NOT_CONVERGE'
   });
- 
+
   const LEGACY_FAILURE_CODE_MAP = Object.freeze({
     'runtime-not-started': FAILURE_CODE.RUNTIME_NOT_STARTED,
     'main-style-missing': FAILURE_CODE.MAIN_STYLE_MISSING,
@@ -645,7 +726,7 @@
     'managed-width-under-applied': FAILURE_CODE.WIDTH_UNDER_APPLIED,
     'dom-fingerprint-changed': FAILURE_CODE.DOM_FINGERPRINT_CHANGED
   });
- 
+
   const STRATEGY_REGISTRY = Object.freeze([
     Object.freeze({
       id: 'virtualized-thread',
@@ -700,16 +781,16 @@
       }
     })
   ]);
- 
+
   function normalizeFailureCode(value) {
     const text = String(value || '');
     return LEGACY_FAILURE_CODE_MAP[text] || text;
   }
- 
+
   function normalizeFailureCodes(values = []) {
     return [...new Set((values || []).map(normalizeFailureCode).filter(Boolean))];
   }
- 
+
   function selectDomStrategy(capabilities) {
     const candidates = STRATEGY_REGISTRY
       .map((strategy) => ({
@@ -718,18 +799,18 @@
         minimumConfidence: strategy.minimumConfidence
       }))
       .sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
- 
+
     const winner = candidates[0] || {
       id: 'unknown',
       score: 0,
       minimumConfidence: CONFIG.strategyMinConfidence
     };
- 
+
     const threshold = Math.max(
       CONFIG.strategyMinConfidence,
       winner.minimumConfidence || 0
     );
- 
+
     const selection = {
       id: winner.score >= threshold ? winner.id : 'unknown',
       candidateId: winner.id,
@@ -738,34 +819,34 @@
       lowConfidence: winner.score < threshold,
       candidates
     };
- 
+
     runtime.strategySelection = selection;
     return selection;
   }
- 
+
   const RELOAD_GUARD_KEY = 'uwc.reload.guard.v1';
- 
+
   const settings = {
     ...DEFAULTS
   };
- 
+
   const runtime = {
     started: false,
     href: '',
- 
+
     bodyObserver: null,
     headObserver: null,
     rootObserver: null,
     bootstrapObserver: null,
     paneResizeObserver: null,
- 
+
     observedBody: null,
     observedHead: null,
     observedRoot: null,
     observedPane: null,
- 
+
     eventController: null,
- 
+
     scanTimer: 0,
     repairTimer: 0,
     routeTimer: 0,
@@ -774,18 +855,30 @@
     toastTimer: 0,
     animationFrame: 0,
     idleCallback: 0,
- 
+
     originalPushState: null,
     originalReplaceState: null,
     wrappedPushState: null,
     wrappedReplaceState: null,
- 
+
     menusRegistered: false,
     menuCommandIds: new Map(),
     modalSyncing: false,
     modalReturnFocus: null,
     modalSettingsSnapshot: '',
- 
+    composerScrollGuardNodes: new Set(),
+    composerVisualScrollbarNodes: new Set(),
+    composerMentionScrollbarScopeNodes: new Set(),
+    composerScrollGuardInitialOverflow: new WeakMap(),
+    composerScrollGuardFrame: 0,
+    composerScrollGuardTimer: 0,
+    composerScrollGuardLateTimer: 0,
+    composerScrollGuardLastAudit: null,
+    mentionPopupNode: null,
+    mentionPopupOriginalStyle: new Map(),
+    mentionPopupClipNodes: new Set(),
+    mentionPopupLastAudit: null,
+
     canvasDetected: false,
     effectivePaneWidth: 0,
     effectivePaneHeight: 0,
@@ -909,7 +1002,7 @@
     lastSavedAt: 0,
     storageAvailable: true,
     instanceStartedAt: 0,
- 
+
     marked: new Map(
       MANAGED_MARKERS.map((attribute) => [
         attribute,
@@ -917,11 +1010,11 @@
       ])
     )
   };
- 
+
   function getRoot() {
     return document.documentElement || null;
   }
- 
+
   function getHead() {
     return (
       document.head ||
@@ -929,28 +1022,28 @@
       null
     );
   }
- 
+
   function getBody() {
     return document.body || null;
   }
- 
+
   function isElement(value) {
     return value instanceof Element;
   }
- 
+
   function isConnectedElement(value) {
     return isElement(value) && value.isConnected;
   }
- 
+
   function isVisibleElement(element) {
     if (!isConnectedElement(element)) {
       return false;
     }
- 
+
     try {
       const rect = element.getBoundingClientRect();
       const style = getComputedStyle(element);
- 
+
       return (
         rect.width > 0 &&
         rect.height > 0 &&
@@ -961,34 +1054,34 @@
       return true;
     }
   }
- 
+
   function currentRuntimeEpoch() {
     return runtime.epoch;
   }
- 
+
   function isCurrentRuntimeEpoch(epoch) {
     return Boolean(
       runtime.started &&
       Number(epoch) === runtime.epoch
     );
   }
- 
+
   function rejectStaleCallback(epoch, source = 'callback') {
     if (isCurrentRuntimeEpoch(epoch)) {
       return false;
     }
- 
+
     runtime.staleCallbackCount += 1;
- 
+
     pushDebugEvent('stale-callback-blocked', {
       source,
       callbackEpoch: Number(epoch),
       runtimeEpoch: runtime.epoch
     });
- 
+
     return true;
   }
- 
+
   function guardRuntimeEpoch(
     callback,
     source = 'callback',
@@ -998,19 +1091,19 @@
       if (rejectStaleCallback(epoch, source)) {
         return undefined;
       }
- 
+
       return callback(...args);
     };
   }
- 
+
   function updateSelectorHealth() {
     const now = Date.now();
     const snapshot = {};
     const visibilitySampleLimit = settings.lowPowerMode ? 16 : 200;
- 
+
     for (const target of SELECTOR_HEALTH_TARGETS) {
       let nodes = [];
- 
+
       try {
         nodes = Array.from(
           document.querySelectorAll(
@@ -1018,20 +1111,20 @@
           )
         );
       } catch (_) {}
- 
+
       const visibleCount =
         nodes.slice(0, visibilitySampleLimit)
           .filter(isVisibleElement)
           .length;
- 
+
       const previous =
         runtime.selectorHealth.get(
           target.id
         );
- 
+
       const hitCount = nodes.length;
       const present = hitCount > 0;
- 
+
       const item = {
         id: target.id,
         label: target.label,
@@ -1055,21 +1148,21 @@
               ? 'missing'
               : 'degraded'
       };
- 
+
       runtime.selectorHealth.set(
         target.id,
         item
       );
- 
+
       snapshot[target.id] = {
         ...item
       };
     }
- 
+
     runtime.lastSelectorHealthAt = now;
     return snapshot;
   }
- 
+
   function getSelectorHealthSummary(
     refresh = false
   ) {
@@ -1099,7 +1192,7 @@
     ) {
       updateSelectorHealth();
     }
- 
+
     const get = (id) =>
       runtime.selectorHealth.get(id) || {
         hitCount: 0,
@@ -1108,43 +1201,43 @@
         status: 'unknown',
         lastSeenAt: 0
       };
- 
+
     const mainHealthy =
       get('main').hitCount > 0;
- 
+
     const conversationEvidence =
       get('transcript-root').hitCount > 0 ||
       get('conversation-target').hitCount > 0;
- 
+
     const turnEvidence =
       get('virtualized-turns').hitCount > 0 ||
       get('fallback-turns').hitCount > 0;
- 
+
     const conversationExpected =
       conversationEvidence ||
       turnEvidence ||
       runtime.lastTurnCount > 0;
- 
+
     const conversationHealthy =
       !conversationExpected ||
       conversationEvidence;
- 
+
     const turnsHealthy =
       !conversationExpected ||
       turnEvidence;
- 
+
     const composerHealthy =
       !settings.widenComposer ||
       get('composer-input').hitCount > 0 ||
       get('composer-shell').hitCount > 0;
- 
+
     const structuralHealthy =
       get('structural-roots').hitCount > 0 ||
       (
         !conversationExpected &&
         composerHealthy
       );
- 
+
     const score = Math.round(
       (mainHealthy ? 20 : 0) +
       (conversationHealthy ? 25 : 0) +
@@ -1152,7 +1245,7 @@
       (composerHealthy ? 20 : 0) +
       (structuralHealthy ? 5 : 0)
     );
- 
+
     return {
       score,
       status:
@@ -1179,21 +1272,21 @@
         runtime.lastSelectorHealthAt
     };
   }
- 
+
   function recordPerformanceSample(
     name,
     durationMs
   ) {
     const budget =
       PERFORMANCE_BUDGET[name];
- 
+
     if (
       !Number.isFinite(budget) ||
       !Number.isFinite(durationMs)
     ) {
       return null;
     }
- 
+
     const previous =
       runtime.performanceBudgetState.get(
         name
@@ -1207,7 +1300,7 @@
         lastMs: 0,
         lastAt: 0
       };
- 
+
     const excessMs = Math.max(0, durationMs - budget);
     const next = {
       ...previous,
@@ -1227,12 +1320,12 @@
       lastMs: durationMs,
       lastAt: Date.now()
     };
- 
+
     runtime.performanceBudgetState.set(
       name,
       next
     );
- 
+
     return {
       ...next,
       averageMs:
@@ -1247,10 +1340,10 @@
           : 0
     };
   }
- 
+
   function getPerformanceBudgetReport() {
     const operations = {};
- 
+
     for (
       const [name, budgetMs] of
       Object.entries(PERFORMANCE_BUDGET)
@@ -1268,7 +1361,7 @@
           lastMs: 0,
           lastAt: 0
         };
- 
+
       operations[name] = {
         ...state,
         overBudgetMs: state.overBudgetMs || 0,
@@ -1288,7 +1381,7 @@
             : 0
       };
     }
- 
+
     // Manual self-tests are explicitly diagnostic and must not increase the
     // background health score just by adding fast, successful samples.
     // Retain their counts and timing in operations for transparency.
@@ -1297,21 +1390,21 @@
         .filter((item) =>
           item.samples > 0 && item.name !== 'selfTest'
         );
- 
+
     const totalSamples =
       sampled.reduce(
         (sum, item) =>
           sum + item.samples,
         0
       );
- 
+
     const totalViolations =
       sampled.reduce(
         (sum, item) =>
           sum + item.violations,
         0
       );
- 
+
     // Violation *frequency* overreacts to tiny overruns, especially with
     // only one or two startup samples. Grade by excess elapsed time instead.
     // No manual self-test samples contribute to either numerator or denominator.
@@ -1324,7 +1417,7 @@
     const score = performanceScoreFromExcess(
       totalOverBudgetMs, totalSamples
     );
- 
+
     return {
       score,
       scoringMethod: 'average-over-budget-ms',
@@ -1344,22 +1437,22 @@
       operations
     };
   }
- 
+
   function mutationIntentKey(type, attributeName = '') {
     return `${String(type || 'unknown')}:${String(attributeName || '')}`;
   }
- 
+
   function markMutationIntent(node, type, attributeName = '') {
     if (!node || (typeof node !== 'object' && typeof node !== 'function')) {
       return;
     }
- 
+
     let intents = runtime.mutationIntentMap.get(node);
     if (!intents) {
       intents = new Map();
       runtime.mutationIntentMap.set(node, intents);
     }
- 
+
     const key = mutationIntentKey(type, attributeName);
     const previous = intents.get(key);
     const now = Date.now();
@@ -1368,37 +1461,37 @@
       count: (previous && previous.expiresAt >= now ? previous.count : 0) + 1
     });
   }
- 
+
   function hasMutationIntent(record) {
     const intents = runtime.mutationIntentMap.get(record?.target);
     if (!intents) {
       return false;
     }
- 
+
     const now = Date.now();
     const key = mutationIntentKey(
       record.type,
       record.type === 'attributes' ? record.attributeName : ''
     );
     const entry = intents.get(key);
- 
+
     if (!entry || entry.expiresAt < now || entry.count <= 0) {
       intents.delete(key);
       return false;
     }
- 
+
     // One script-originated operation accounts for one observer record.
     // Never suppress later external changes on the same node/attribute.
     entry.count -= 1;
     if (entry.count === 0) intents.delete(key);
     return true;
   }
- 
+
   function attributeMutations(records = []) {
     const externalRecords = [];
     let internal = 0;
     let external = 0;
- 
+
     for (const record of records || []) {
       if (hasMutationIntent(record)) {
         internal += 1;
@@ -1407,13 +1500,13 @@
         externalRecords.push(record);
       }
     }
- 
+
     const source = internal > 0 && external > 0
       ? 'mixed'
       : internal > 0
         ? 'ultrawide'
         : 'external';
- 
+
     const result = {
       source,
       internal,
@@ -1421,50 +1514,50 @@
       total: internal + external,
       externalRecords
     };
- 
+
     runtime.lastMutationAttribution = result;
     if (source === 'ultrawide') runtime.internalMutationBatchCount += 1;
     else if (source === 'mixed') runtime.mixedMutationBatchCount += 1;
     else runtime.externalMutationBatchCount += 1;
- 
+
     return result;
   }
- 
+
   function setAttributeValue(element, name, value) {
     if (!element || element.getAttribute(name) === value) {
       return false;
     }
- 
+
     markMutationIntent(element, 'attributes', name);
     element.setAttribute(name, value);
     return true;
   }
- 
+
   function setBooleanAttribute(element, name, enabled) {
     if (!element) {
       return false;
     }
- 
+
     if (enabled) {
       return setAttributeValue(element, name, '1');
     }
- 
+
     if (element.hasAttribute(name)) {
       markMutationIntent(element, 'attributes', name);
       element.removeAttribute(name);
       return true;
     }
- 
+
     return false;
   }
- 
+
   function shouldPauseWork() {
     return Boolean(
       settings.pauseWhenHidden &&
       document.hidden
     );
   }
- 
+
   function nowMs() {
     return (
       typeof performance !== 'undefined' &&
@@ -1473,32 +1566,32 @@
       ? performance.now()
       : Date.now();
   }
- 
+
   function requestNextFrame(callback) {
     if (typeof requestAnimationFrame === 'function') {
       return requestAnimationFrame(callback);
     }
- 
+
     return window.setTimeout(callback, 16);
   }
- 
+
   function cancelNextFrame(id) {
     if (!id) {
       return;
     }
- 
+
     if (typeof cancelAnimationFrame === 'function') {
       cancelAnimationFrame(id);
       return;
     }
- 
+
     clearTimeout(id);
   }
- 
+
   function getStyleText(id) {
     return document.getElementById(id)?.textContent || '';
   }
- 
+
   function parseStoredSettings(value) {
     if (
       value &&
@@ -1507,11 +1600,11 @@
     ) {
       return value;
     }
- 
+
     if (typeof value !== 'string') {
       return null;
     }
- 
+
     try {
       const parsed = JSON.parse(value);
       return (
@@ -1525,23 +1618,23 @@
       return null;
     }
   }
- 
+
   function hasConnectedMarker(attribute) {
     const elements = runtime.marked.get(attribute);
- 
+
     if (!elements || elements.size === 0) {
       return false;
     }
- 
+
     for (const element of elements) {
       if (element?.isConnected && element.getAttribute(attribute) === '1') {
         return true;
       }
     }
- 
+
     return false;
   }
- 
+
   function hasMarkerAttributeDrift() {
     for (const [attribute, elements] of runtime.marked) {
       for (const element of elements) {
@@ -1552,7 +1645,7 @@
     }
     return false;
   }
- 
+
   function hasDisconnectedMarkers() {
     for (const elements of runtime.marked.values()) {
       for (const element of elements) {
@@ -1561,17 +1654,17 @@
         }
       }
     }
- 
+
     return false;
   }
- 
+
   function hasGmStorage() {
     return (
       typeof GM_getValue === 'function' &&
       typeof GM_setValue === 'function'
     );
   }
- 
+
   function readStorage(key) {
     try {
       if (hasGmStorage()) {
@@ -1580,7 +1673,7 @@
         );
       }
     } catch (_) {}
- 
+
     try {
       const raw = localStorage.getItem(key);
       return parseStoredSettings(raw);
@@ -1588,7 +1681,7 @@
       return null;
     }
   }
- 
+
   function writeStorage(key, value) {
     try {
       if (hasGmStorage()) {
@@ -1598,7 +1691,7 @@
         return true;
       }
     } catch (_) {}
- 
+
     try {
       localStorage.setItem(key, JSON.stringify(value));
       runtime.storageAvailable = true;
@@ -1612,34 +1705,34 @@
       return false;
     }
   }
- 
+
   function clampNumber(value, min, max, fallback) {
     const number = Number(value);
- 
+
     if (!Number.isFinite(number)) {
       return fallback;
     }
- 
+
     return Math.min(max, Math.max(min, number));
   }
- 
+
   function clampInteger(value, min, max, fallback) {
     return Math.round(
       clampNumber(value, min, max, fallback)
     );
   }
- 
+
   function normalizeBoolean(value, fallback) {
     return typeof value === 'boolean'
       ? value
       : fallback;
   }
- 
+
   function normalizeSettings(input) {
     const output = {
       ...DEFAULTS
     };
- 
+
     if (
       !input ||
       typeof input !== 'object' ||
@@ -1647,215 +1740,216 @@
     ) {
       return output;
     }
- 
+
     output.enabled = normalizeBoolean(
       input.enabled,
       output.enabled
     );
- 
+
     output.wide = normalizeBoolean(
       input.wide,
       output.wide
     );
- 
+
     output.left = normalizeBoolean(
       input.left,
       output.left
     );
- 
+
     output.cap = CAPS.includes(String(input.cap))
       ? String(input.cap)
       : output.cap;
- 
+
     output.auto = normalizeBoolean(
       input.auto,
       output.auto
     );
- 
+
     output.autoMinWidth = clampInteger(
       input.autoMinWidth,
       ...LIMITS.autoMinWidth,
       output.autoMinWidth
     );
- 
+
     output.disableOnTouch = normalizeBoolean(
       input.disableOnTouch,
       output.disableOnTouch
     );
- 
+
     output.disableBelowHeight = clampInteger(
       input.disableBelowHeight,
       ...LIMITS.disableBelowHeight,
       output.disableBelowHeight
     );
- 
+
     output.gutterMin = clampInteger(
       input.gutterMin,
       ...LIMITS.gutterMin,
       output.gutterMin
     );
- 
+
     output.gutterVw = clampNumber(
       input.gutterVw,
       ...LIMITS.gutterVw,
       output.gutterVw
     );
- 
+
     output.gutterMax = clampInteger(
       input.gutterMax,
       ...LIMITS.gutterMax,
       output.gutterMax
     );
- 
+
     output.widenComposer = normalizeBoolean(
       input.widenComposer ?? input.composerWide,
       output.widenComposer
     );
- 
+
     output.safeMedia = normalizeBoolean(
       input.safeMedia ?? input.mediaSafe,
       output.safeMedia
     );
- 
+
     output.canvasSafeMode = normalizeBoolean(
       input.canvasSafeMode ?? input.canvasTuning,
       output.canvasSafeMode
     );
- 
+
     output.toast = normalizeBoolean(
       input.toast ?? input.showToast,
       output.toast
     );
- 
+
     output.toastMs = clampInteger(
       input.toastMs,
       ...LIMITS.toastMs,
       output.toastMs
     );
- 
+
     output.scanDebounceMs = clampInteger(
       input.scanDebounceMs ?? input.mutationDebounceMs,
       ...LIMITS.scanDebounceMs,
       output.scanDebounceMs
     );
- 
+
     output.repairIntervalMs = clampInteger(
       input.repairIntervalMs,
       ...LIMITS.repairIntervalMs,
       output.repairIntervalMs
     );
- 
+
     output.routePollMs = clampInteger(
       input.routePollMs,
       ...LIMITS.routePollMs,
       output.routePollMs
     );
- 
+
     output.lowPowerMode = normalizeBoolean(
       input.lowPowerMode,
       output.lowPowerMode
     );
- 
+
     output.pauseWhenHidden = normalizeBoolean(
       input.pauseWhenHidden,
       output.pauseWhenHidden
     );
- 
+
     output.performanceTelemetry = normalizeBoolean(
       input.performanceTelemetry,
       output.performanceTelemetry
     );
- 
+
     output.debugOverlay = normalizeBoolean(
       input.debugOverlay,
       output.debugOverlay
     );
- 
+
     output.closeSettingsOnBackdrop = normalizeBoolean(
       input.closeSettingsOnBackdrop ??
         input.optionsCloseOnBackdrop,
       output.closeSettingsOnBackdrop
     );
- 
+
     if (output.gutterMax < output.gutterMin) {
       output.gutterMax = output.gutterMin;
     }
- 
+
     return output;
   }
- 
+
   function loadSettings() {
     const current = readStorage(STORAGE_KEY);
- 
+
     if (current) {
       Object.assign(
         settings,
         normalizeSettings(current)
       );
- 
+
       return;
     }
- 
+
     for (const key of LEGACY_STORAGE_KEYS) {
       const legacy = readStorage(key);
- 
+
       if (!legacy) {
         continue;
       }
- 
+
       Object.assign(
         settings,
         normalizeSettings(legacy)
       );
- 
+
       saveSettings();
       return;
     }
   }
- 
+
   function saveSettings() {
     return writeStorage(
       STORAGE_KEY,
       { ...settings }
     );
   }
- 
+
   function removeById(id) {
     const element = document.getElementById(id);
     if (!element) {
       return false;
     }
- 
+
     if (element.parentNode) {
       markMutationIntent(element.parentNode, 'childList');
     }
     element.remove();
     return true;
   }
- 
+
   function cleanupLegacyArtifacts() {
     for (const id of LEGACY_STYLE_IDS) {
       removeById(id);
     }
- 
+
     for (const id of LEGACY_ELEMENT_IDS) {
       removeById(id);
     }
- 
+
     const root = getRoot();
- 
+
     if (root) {
       const oldRootAttributes = [
         'data-uwc-on',
         'data-uwc-mounted'
       ];
- 
+
       for (const attribute of oldRootAttributes) {
         root.removeAttribute(attribute);
       }
     }
- 
+
     const oldManagedAttributes = [
+      ATTR.pane,
       'data-uwc-conversation-root',
       'data-uwc-conversation-path',
       'data-uwc-turn',
@@ -1865,7 +1959,7 @@
       'data-uwc-plan-notice',
       'data-uwc-plan-notice-path'
     ];
- 
+
     for (const attribute of oldManagedAttributes) {
       try {
         document
@@ -1876,80 +1970,84 @@
       } catch (_) {}
     }
   }
- 
+
   function isTouchLike() {
     try {
       const coarse =
         typeof matchMedia === 'function' &&
         matchMedia('(pointer: coarse)').matches;
- 
+
       const touchPoints =
         Number(navigator.maxTouchPoints || 0) > 0;
- 
+
       return coarse || touchPoints;
     } catch (_) {
       return false;
     }
   }
- 
+
   function getVisibleRect(element) {
     if (!isConnectedElement(element)) {
       return null;
     }
- 
+
     try {
       const rect = element.getBoundingClientRect();
- 
+
       if (
         rect.width <= 0 ||
         rect.height <= 0
       ) {
         return null;
       }
- 
+
       return rect;
     } catch (_) {
       return null;
     }
   }
- 
+
   function resolveActivePane() {
     const selectors = [
       '[data-thread-user-message-navigation-content]',
       '[data-thread-find-target="conversation"]',
       '#thread-bottom-container',
-      '#prompt-textarea'
+      PRIMARY_COMPOSER_INPUT,
+      'form[data-type="unified-composer"]'
     ];
- 
+
     for (const selector of selectors) {
       let anchor = null;
- 
+
       try {
         anchor = Array.from(
           document.querySelectorAll(selector)
-        ).find(isVisibleElement) || null;
+        ).find((element) =>
+          !element.closest(SELECTOR.excludedComposerAncestor) &&
+          isVisibleElement(element)
+        ) || null;
       } catch (_) {}
- 
+
       if (!anchor) {
         continue;
       }
- 
+
       // Prefer the actual pane: semantic transcript roots may be much narrower
       // than their containing main and must not determine adaptive activation.
       const main =
         anchor.closest?.('main,[role="main"]') ||
         nearestMain(anchor) ||
         null;
- 
-      if (getVisibleRect(main)) {
+
+      if (isVisibleElement(main)) {
         return main;
       }
- 
+
       let current = anchor;
- 
+
       for (let depth = 0; current && depth < 8; depth += 1) {
         const rect = getVisibleRect(current);
- 
+
         if (
           rect &&
           rect.width >= 320 &&
@@ -1957,22 +2055,28 @@
         ) {
           return current;
         }
- 
+
         current = current.parentElement;
       }
     }
- 
+
     try {
-      return Array.from(
+      const mains = Array.from(
         document.querySelectorAll(
           'main,[role="main"]'
         )
-      ).find(isVisibleElement) || null;
+      ).filter((element) =>
+        !element.closest(SELECTOR.excludedComposerAncestor) &&
+        isVisibleElement(element)
+      );
+      const conversation = `${SELECTOR.preferredTurns},${SELECTOR.fallbackMessages}`;
+      return mains.find((element) => Array.from(element.querySelectorAll(conversation))
+        .some((turn) => !turn.closest(SELECTOR.excludedComposerAncestor) && isVisibleElement(turn))) || null;
     } catch (_) {
       return null;
     }
   }
- 
+
   // A pane owns its override only until another actor replaces it.
   // Always restore the previously existing inline declaration on cleanup.
   function restoreSizedPane() {
@@ -2039,21 +2143,21 @@
       runtime.observedPane?.isConnected
         ? runtime.observedPane
         : resolveActivePane();
- 
+
     const rect = getVisibleRect(pane);
- 
+
     const width = rect
       ? Math.round(rect.width)
       : Math.max(0, Math.round(window.innerWidth || 0));
- 
+
     const height = rect
       ? Math.round(rect.height)
       : Math.max(0, Math.round(window.innerHeight || 0));
- 
+
     runtime.effectivePaneWidth = width;
     runtime.effectivePaneHeight = height;
     syncSizedPane(pane, width);
- 
+
     return {
       element: pane || null,
       width,
@@ -2061,30 +2165,30 @@
       source: rect ? 'pane' : 'viewport'
     };
   }
- 
+
   function getAdaptiveWidth() {
     const measured =
       runtime.effectivePaneWidth > 0
         ? runtime.effectivePaneWidth
         : measureEffectivePane().width;
- 
+
     return measured > 0
       ? measured
       : (window.innerWidth || 0);
   }
- 
+
   function getExpectedContentWidthPx(
     paneWidth = getAdaptiveWidth()
   ) {
     const width =
       Math.max(0, Number(paneWidth || 0));
- 
+
     const viewportWidth =
       Math.max(
         0,
         Number(window.innerWidth || width)
       );
- 
+
     const gutter = Math.min(
       settings.gutterMax,
       Math.max(
@@ -2093,41 +2197,41 @@
           (settings.gutterVw / 100)
       )
     );
- 
+
     const available =
       Math.max(
         0,
         width - (gutter * 2)
       );
- 
+
     if (settings.cap === 'none') {
       return available;
     }
- 
+
     const cap =
       Number(settings.cap);
- 
+
     return Number.isFinite(cap)
       ? Math.min(available, cap)
       : available;
   }
- 
+
   function isWideActive() {
     if (!settings.enabled || !settings.wide) {
       return false;
     }
- 
+
     if (!settings.auto) {
       return true;
     }
- 
+
     if (
       settings.disableOnTouch &&
       isTouchLike()
     ) {
       return false;
     }
- 
+
     if (
       settings.disableBelowHeight > 0 &&
       window.innerHeight > 0 &&
@@ -2136,13 +2240,13 @@
     ) {
       return false;
     }
- 
+
     return (
       getAdaptiveWidth() >=
       settings.autoMinWidth
     );
   }
- 
+
   function detectDomCapabilities(force = false) {
     const now = Date.now();
     if (
@@ -2153,7 +2257,7 @@
     ) {
       return runtime.lastCapabilities;
     }
- 
+
     const queryOne = (selector) => {
       try {
         return Boolean(document.querySelector(selector));
@@ -2161,7 +2265,7 @@
         return false;
       }
     };
- 
+
     const queryCount = (selector) => {
       try {
         return document.querySelectorAll(selector).length;
@@ -2169,12 +2273,12 @@
         return 0;
       }
     };
- 
+
     const virtualizedTurnCount = queryCount(
       '[data-turn-key],[data-content-search-turn-key]'
     );
     const fallbackTurnCount = queryCount(SELECTOR.fallbackMessages);
- 
+
     const capabilities = {
       mainPresent: queryOne(SELECTOR.main),
       transcriptRoot: queryOne(
@@ -2197,7 +2301,7 @@
       splitView: runtime.canvasDetected,
       resizeObserver: typeof ResizeObserver === 'function'
     };
- 
+
     const selection = selectDomStrategy(capabilities);
     capabilities.strategy = selection.id;
     capabilities.strategyCandidate = selection.candidateId;
@@ -2205,10 +2309,10 @@
     capabilities.strategyThreshold = selection.threshold;
     capabilities.strategyLowConfidence = selection.lowConfidence;
     capabilities.strategyCandidates = selection.candidates;
- 
+
     runtime.lastCapabilities = capabilities;
     runtime.lastCapabilitiesAt = now;
- 
+
     if (
       !settings.lowPowerMode &&
       (!runtime.lastSelectorHealthAt ||
@@ -2217,16 +2321,16 @@
     ) {
       updateSelectorHealth();
     }
- 
+
     return capabilities;
   }
- 
+
   function evaluateCompatibility(
     capabilities = detectDomCapabilities()
   ) {
     const issues = [];
     let score = 100;
- 
+
     if (
       !capabilities.transcriptRoot &&
       !capabilities.conversationTarget
@@ -2236,7 +2340,7 @@
         'No current transcript/conversation root detected'
       );
     }
- 
+
     if (
       !capabilities.virtualizedTurns &&
       !capabilities.fallbackTurns
@@ -2244,7 +2348,7 @@
       score -= 35;
       issues.push('No conversation turns detected');
     }
- 
+
     if (
       settings.widenComposer &&
       !capabilities.promptTextarea &&
@@ -2254,41 +2358,41 @@
       score -= 20;
       issues.push('Composer root/input not detected');
     }
- 
+
     if (capabilities.strategyLowConfidence) {
       score -= 15;
       issues.push(
         `DOM strategy confidence ${capabilities.strategyConfidence || 0}% is below ${capabilities.strategyThreshold || CONFIG.strategyMinConfidence}%`
       );
     }
- 
+
     if (
       capabilities.strategy === 'unknown'
     ) {
       score -= 10;
       issues.push('No supported layout strategy resolved');
     }
- 
+
     score = Math.max(0, score);
- 
+
     const status =
       score >= 90
         ? 'healthy'
         : score >= 60
           ? 'degraded'
           : 'unsupported';
- 
+
     const result = {
       status,
       score,
       strategy: capabilities.strategy,
       issues
     };
- 
+
     runtime.lastCompatibility = result;
     return result;
   }
- 
+
   // Keep the clip ancestor aligned to the pane AND its inner transcript
   // aligned inside that ancestor. Work can independently recenter either node
   // without changing the pane dimensions or triggering a ResizeObserver.
@@ -2310,7 +2414,7 @@
     runtime.clipThreadShift = 0;
     runtime.clipThreadApplied = '';
   }
- 
+
   function clearClipAlignment() {
     if (runtime.clipAlignmentFrame) {
       cancelNextFrame(runtime.clipAlignmentFrame);
@@ -2337,7 +2441,7 @@
     runtime.clipAlignmentLockSignature = '';
     runtime.clipAlignmentLockThread = null;
   }
- 
+
   function findPaneClipAncestor(pane) {
     if (!pane) return null;
     const cached = runtime.clipAlignmentNode;
@@ -2366,7 +2470,7 @@
     }
     return null;
   }
- 
+
   function syncClipAlignment() {
     // Reuse the observed pane for inexpensive periodic checks. The observer
     // rebinds on route/pane changes and the cached node is validated below.
@@ -2386,7 +2490,7 @@
       runtime.clipAlignmentInfo = {active:false,reason:'wide-mode-inactive-or-hidden'};
       return;
     }
- 
+
     const clip = findPaneClipAncestor(pane);
     const cr = getVisibleRect(clip);
     if (!clip || !cr || cr.width > pr.width + 30) {
@@ -2394,7 +2498,7 @@
       runtime.clipAlignmentInfo = {active:false,reason:'no-safe-clipping-container'};
       return;
     }
- 
+
     // v10: This is the exact DOM and CSS offset mechanism captured in the
     // user's Work trace. The stylesheet above owns both the native variable
     // and the clipping element's translate. Writing another inline translate
@@ -2428,7 +2532,7 @@
       };
       return;
     }
- 
+
     const threadProbe = (runtime.clipThreadNode?.isConnected &&
       clip.contains(runtime.clipThreadNode))
       ? runtime.clipThreadNode
@@ -2437,7 +2541,7 @@
       location.pathname,
       pr.left.toFixed(1), pr.width.toFixed(1), cr.width.toFixed(1)
     ].join('|');
- 
+
     // Work's layout engine can react to our translations by relocating the
     // exact same elements with unchanged pane geometry. Chasing that state at
     // every timer/DOM callback produced visible left/right oscillation. After
@@ -2483,7 +2587,7 @@
     }
     runtime.clipAlignmentLockSignature = '';
     runtime.clipAlignmentLockThread = null;
- 
+
     if (runtime.clipAlignmentNode !== clip) {
       clearClipAlignment();
       const prior = clip.style.getPropertyValue('translate');
@@ -2497,7 +2601,7 @@
       runtime.clipAlignmentPreviousPriority =
         clip.style.getPropertyPriority('translate');
     }
- 
+
     const naturalLeft = cr.left - runtime.clipAlignmentShift;
     const desiredLeft = pr.left + Math.max(0, (pr.width - cr.width) / 2);
     const shift = desiredLeft - naturalLeft;
@@ -2506,7 +2610,7 @@
       runtime.clipAlignmentInfo = {active:false,reason:'excessive-clip-offset'};
       return;
     }
- 
+
     const appliedShift = Math.abs(shift) > 10 ? Math.round(shift * 10) / 10 : 0;
     if (Math.abs(appliedShift - runtime.clipAlignmentShift) >= 0.2) {
       markMutationIntent(clip, 'attributes', 'style');
@@ -2521,7 +2625,7 @@
       runtime.clipAlignmentShift = appliedShift;
       runtime.clipAlignmentApplied = clip.style.getPropertyValue('translate');
     }
- 
+
     const adjustedClip = getVisibleRect(clip);
     const thread = (runtime.clipThreadNode?.isConnected &&
       clip.contains(runtime.clipThreadNode))
@@ -2580,7 +2684,7 @@
       innerReason = !threadRect ? 'no-visible-thread' : 'incompatible-thread-width';
       clearClipThreadAlignment();
     }
- 
+
     const outerAligned = adjustedClip &&
       adjustedClip.left >= pr.left - 8 &&
       adjustedClip.right <= pr.right + 8;
@@ -2614,7 +2718,7 @@
         ? Math.max(0, Math.round(threadRect.right - adjustedClip.right)) : null
     };
   }
- 
+
   function scheduleClipAlignment() {
     if (!runtime.started || runtime.clipAlignmentFrame) return;
     const epoch = currentRuntimeEpoch();
@@ -2625,7 +2729,7 @@
       }
     });
   }
- 
+
   // v9: No periodic alignment timer. Work may measure/rewrite its own layout
   // after an inline translation; polling that translation caused a feedback
   // loop roughly once per second. DOM/route/resize events remain supported.
@@ -2635,54 +2739,54 @@
       runtime.clipAlignmentTimer = 0;
     }
   }
- 
+
   function onPaneResize(entries) {
     const entry = entries?.[0];
- 
-    if (!entry) {
+
+    if (!entry || entry.target !== runtime.observedPane) {
       return;
     }
- 
+
     const rect =
-      entry.contentRect ||
-      getVisibleRect(runtime.observedPane);
- 
+      getVisibleRect(entry.target) ||
+      entry.contentRect;
+
     if (!rect) {
       return;
     }
- 
+
     const width =
       Math.max(0, Math.round(rect.width));
- 
+
     const height =
       Math.max(0, Math.round(rect.height));
- 
+
     const changed =
       width !== runtime.effectivePaneWidth ||
       height !== runtime.effectivePaneHeight;
- 
+
     runtime.effectivePaneWidth = width;
     runtime.effectivePaneHeight = height;
     syncSizedPane(runtime.observedPane, width);
     runtime.lastPaneResizeAt = Date.now();
     runtime.paneResizeCount += 1;
     scheduleClipAlignment();
- 
+
     if (!changed || !runtime.started) {
       return;
     }
- 
+
     // A genuinely different pane size is fresh evidence: allow bounded repair.
     runtime.postScanFailureSignature = '';
     runtime.postScanSameFailureCount = 0;
     runtime.postScanRepairPaused = false;
- 
+
     if (!settings.enabled) {
       clearRootState();
       syncSettingsModal();
       return;
     }
- 
+
     setRootState();
     syncSettingsModal();
     requestRepair(
@@ -2690,10 +2794,8 @@
       [DIRTY.split, DIRTY.root]
     );
   }
- 
-  function attachPaneResizeObserver() {
-    const pane = resolveActivePane();
- 
+
+  function attachPaneResizeObserver(pane = resolveActivePane()) {
     if (
       pane === runtime.observedPane &&
       runtime.paneResizeObserver
@@ -2701,27 +2803,27 @@
       measureEffectivePane();
       return true;
     }
- 
+
     runtime.paneResizeObserver?.disconnect();
     runtime.paneResizeObserver = null;
     runtime.observedPane = null;
- 
+
     if (!pane) {
       measureEffectivePane();
       return false;
     }
- 
+
     runtime.observedPane = pane;
     measureEffectivePane();
- 
+
     if (typeof ResizeObserver !== 'function') {
       return false;
     }
- 
+
     try {
       const epoch =
         currentRuntimeEpoch();
- 
+
       runtime.paneResizeObserver =
         new ResizeObserver(
           guardRuntimeEpoch(
@@ -2730,7 +2832,7 @@
             epoch
           )
         );
- 
+
       runtime.paneResizeObserver.observe(pane);
       return true;
     } catch (_) {
@@ -2738,7 +2840,7 @@
       return false;
     }
   }
- 
+
   function disconnectPaneResizeObserver() {
     clearSizedPane();
     runtime.paneResizeObserver?.disconnect();
@@ -2747,27 +2849,39 @@
     runtime.effectivePaneWidth = 0;
     runtime.effectivePaneHeight = 0;
   }
- 
+
   function detectCanvas() {
     try {
       runtime.canvasDetected = Array.from(
         document.querySelectorAll(
           SELECTOR.splitViewIndicators
         )
-      ).some(isVisibleElement);
+      ).some((element) =>
+        !element.closest(`[role="dialog"],[aria-modal="true"],${SELECTOR.preferredTurns},${SELECTOR.fallbackMessages}`) &&
+        isVisibleElement(element)
+      );
     } catch (_) {
       runtime.canvasDetected = false;
     }
- 
+
     return runtime.canvasDetected;
   }
- 
+
   function buildMainCss() {
     const cap =
       settings.cap === 'none'
         ? 'none'
         : `${settings.cap}px`;
- 
+
+    const managedTurn = `[${ATTR.turn}="1"]`;
+    const pane = `[${ATTR.pane}="1"]`;
+    const inPane = `:is(${pane},${pane} *)`;
+    const assistantMessage = ':is([data-markdown-text-style="assistant-message"],[data-message-author-role="assistant"])';
+    const assistantTurn = `:is(${managedTurn}${assistantMessage},${managedTurn} ${assistantMessage})`;
+    const tableContainer = '[class*="TableContainer-"]';
+    const tableScroller = '[class*="TableScroller-"]';
+    const structuredTableScroller = `${assistantTurn} ${tableContainer} > ${tableScroller}`;
+
     const safeMediaCss = settings.safeMedia
       ? `
 :root[${ATTR.enabled}="1"][${ATTR.wide}="1"]
@@ -2781,29 +2895,29 @@
   max-width:100%!important;
   box-sizing:border-box!important;
 }
- 
+
 :root[${ATTR.enabled}="1"][${ATTR.wide}="1"]
 [${ATTR.turn}="1"] img,
 :root[${ATTR.enabled}="1"][${ATTR.wide}="1"]
 [${ATTR.turn}="1"] video{
   height:auto!important;
 }
- 
+
 :root[${ATTR.enabled}="1"][${ATTR.wide}="1"]
 [${ATTR.turn}="1"] pre{
   max-width:100%!important;
   overflow-x:auto!important;
 }
- 
+
 :root[${ATTR.enabled}="1"][${ATTR.wide}="1"]
-[${ATTR.turn}="1"] table{
+${managedTurn} table:not(:where(${structuredTableScroller} table)){
   display:block!important;
   width:100%!important;
   max-width:100%!important;
   overflow-x:auto!important;
 }`
       : '';
- 
+
     return `
 :root[${ATTR.version}="${VERSION}"]{
   --uwc-gutter:clamp(
@@ -2817,18 +2931,18 @@
   );
   --uwc-content-width:var(--uwc-available-width);
 }
- 
+
 :root[${ATTR.version}="${VERSION}"]:not([${ATTR.cap}="none"]){
   --uwc-content-width:min(
     var(--uwc-available-width),
     var(--uwc-cap)
   );
 }
- 
-:root[${ATTR.enabled}="1"][${ATTR.wide}="1"] body{
+
+:root[${ATTR.enabled}="1"][${ATTR.wide}="1"] body:has(${pane}){
   overflow-x:clip!important;
 }
- 
+
 /*
  * ChatGPT's newer Work/Project transcript uses --thread-content-x on its
  * scroll-layout host to translate the inner overflow-clipping container.
@@ -2840,22 +2954,22 @@
  * Limit these rules to the observed current Work structure and wide mode.
  */
 :root[${ATTR.enabled}="1"][${ATTR.wide}="1"]
-main [class*="group/thread-scroll-layout"]{
+${inPane}[class*="group/thread-scroll-layout"]{
   --thread-content-x:0px!important;
 }
- 
+
 :root[${ATTR.enabled}="1"][${ATTR.wide}="1"]
-main [class*="group/thread-scroll-layout"]
+${inPane}[class*="group/thread-scroll-layout"]
 .thread-scroll-container > [class*="container-type:inline-size"]{
   translate:none!important;
 }
- 
+
 @supports not (overflow-x:clip){
-  :root[${ATTR.enabled}="1"][${ATTR.wide}="1"] body{
+  :root[${ATTR.enabled}="1"][${ATTR.wide}="1"] body:has(${pane}){
     overflow-x:hidden!important;
   }
 }
- 
+
 /*
  * Current ChatGPT (October 2026) owns the effective reading width at the
  * virtualized transcript root. The stable variable chain is:
@@ -2868,11 +2982,11 @@ main [class*="group/thread-scroll-layout"]
  * Override that chain directly. This is the primary UltraWide mechanism;
  * per-turn markers below are now supplemental for alignment/media handling.
  */
- 
+
 /* Semantic fallback: current ChatGPT width utilities inherit these variables.
-   Applying them at main keeps sizing pane-relative and resilient when React
+   Applying them at the active pane keeps sizing pane-relative when React
    changes intermediate wrappers or utility-class names. */
-:root[${ATTR.enabled}="1"][${ATTR.wide}="1"] main{
+:root[${ATTR.enabled}="1"][${ATTR.wide}="1"] ${pane}{
   --thread-content-responsive-max-width:var(--uwc-content-width)!important;
   --thread-content-max-width:var(--uwc-content-width)!important;
   --thread-body-max-width:calc(
@@ -2881,9 +2995,9 @@ main [class*="group/thread-scroll-layout"]
   )!important;
   min-width:0!important;
 }
- 
+
 :root[${ATTR.enabled}="1"][${ATTR.wide}="1"]
-[data-thread-user-message-navigation-content]{
+${inPane}[data-thread-user-message-navigation-content]{
   --thread-content-responsive-max-width:var(--uwc-content-width)!important;
   --thread-content-max-width:var(--uwc-content-width)!important;
   --thread-body-max-width:calc(
@@ -2896,11 +3010,11 @@ main [class*="group/thread-scroll-layout"]
   margin-inline:auto!important;
   box-sizing:border-box!important;
 }
- 
+
 /* Conversation content inherits the transcript variables even when React
    virtualizes and remounts individual turns. */
 :root[${ATTR.enabled}="1"][${ATTR.wide}="1"]
-[data-thread-find-target="conversation"]{
+${inPane}[data-thread-find-target="conversation"]{
   --thread-content-responsive-max-width:var(--uwc-content-width)!important;
   --thread-content-max-width:var(--uwc-content-width)!important;
   --thread-body-max-width:calc(
@@ -2912,14 +3026,14 @@ main [class*="group/thread-scroll-layout"]
   min-width:0!important;
   box-sizing:border-box!important;
 }
- 
+
 /* Any current width wrapper that redefines the same variables is normalized
    back to the UltraWide width. Variable names are stable semantic anchors and
    avoid dependency on generated hash classes. */
 :root[${ATTR.enabled}="1"][${ATTR.wide}="1"]
-[data-thread-user-message-navigation-content] [class*="thread-content-max-width"],
+${inPane}[data-thread-user-message-navigation-content] [class*="thread-content-max-width"],
 :root[${ATTR.enabled}="1"][${ATTR.wide}="1"]
-[data-thread-user-message-navigation-content] [class*="thread-body-max-width"]{
+${inPane}[data-thread-user-message-navigation-content] [class*="thread-body-max-width"]{
   --thread-content-responsive-max-width:var(--uwc-content-width)!important;
   --thread-content-max-width:var(--uwc-content-width)!important;
   --thread-body-max-width:calc(
@@ -2927,42 +3041,130 @@ main [class*="group/thread-scroll-layout"]
     (var(--thread-body-inline-padding,0px) * 2)
   )!important;
 }
- 
+
 ${settings.widenComposer ? `
-/* Current composer uses the same thread-variable system. Keep the bottom
-   container structurally full width and let its inner responsive wrapper use
-   the configured UltraWide width. */
+/* The transcript can be ~2000px wide while the Work composer remains
+   an independent ~600px surface. Never inherit the pane-wide pixel value as
+   an unbounded inner composer width: it makes compact Work inputs scroll
+   horizontally. Resolve the thread-width chain against the LOCAL containing
+   block and leave the transcript width unchanged. */
 :root[${ATTR.enabled}="1"][${ATTR.wide}="1"]
-#thread-bottom-container{
-  --thread-content-responsive-max-width:var(--uwc-content-width)!important;
-  --thread-content-max-width:var(--uwc-content-width)!important;
-  --thread-body-max-width:calc(
-    var(--thread-content-max-width) +
-    (var(--thread-body-inline-padding,0px) * 2)
-  )!important;
-  width:100%!important;
-  max-width:none!important;
+${inPane}#thread-bottom-container,
+:root[${ATTR.enabled}="1"][${ATTR.wide}="1"]
+${inPane}[${ATTR.composer}="1"]{
+  --thread-content-responsive-max-width:min(100%,var(--uwc-content-width))!important;
+  --thread-content-max-width:min(100%,var(--uwc-content-width))!important;
+  --thread-body-max-width:min(100%,var(--uwc-content-width))!important;
   min-width:0!important;
+  max-width:100%!important;
+  box-sizing:border-box!important;
 }
- 
+
+/* The canonical bottom container is full-width only inside its own parent.
+   Avoid max-width:none: a compact Work bottom area must remain bounded. */
 :root[${ATTR.enabled}="1"][${ATTR.wide}="1"]
-#thread-bottom-container [class*="thread-content-max-width"],
+${inPane}#thread-bottom-container{
+  width:100%!important;
+  max-width:100%!important;
+}
+
+/* Prevent descendants with a native thread-width utility from reintroducing
+   the pane's much larger width or a horizontal scrollport. */
 :root[${ATTR.enabled}="1"][${ATTR.wide}="1"]
-#thread-bottom-container [class*="thread-body-max-width"]{
-  --thread-content-responsive-max-width:var(--uwc-content-width)!important;
-  --thread-content-max-width:var(--uwc-content-width)!important;
-  --thread-body-max-width:calc(
-    var(--thread-content-max-width) +
-    (var(--thread-body-inline-padding,0px) * 2)
-  )!important;
+${inPane}#thread-bottom-container [class*="thread-content-max-width"],
+:root[${ATTR.enabled}="1"][${ATTR.wide}="1"]
+${inPane}#thread-bottom-container [class*="thread-body-max-width"],
+:root[${ATTR.enabled}="1"][${ATTR.wide}="1"]
+${inPane}[${ATTR.composer}="1"] [class*="thread-content-max-width"],
+:root[${ATTR.enabled}="1"][${ATTR.wide}="1"]
+${inPane}[${ATTR.composer}="1"] [class*="thread-body-max-width"]{
+  --thread-content-responsive-max-width:min(100%,var(--uwc-content-width))!important;
+  --thread-content-max-width:min(100%,var(--uwc-content-width))!important;
+  --thread-body-max-width:min(100%,var(--uwc-content-width))!important;
   width:min(100%,var(--uwc-content-width))!important;
   max-width:100%!important;
   min-width:0!important;
+  box-sizing:border-box!important;
   margin-inline:auto!important;
 }
- 
+
+/* Only an actually overflowing composer scroll host receives this marker.
+   @ mentions can remount the input and create a horizontal scrollport one or
+   two ancestors above it. Do not clip generic dialogs or suggestion lists. */
+:root[${ATTR.enabled}="1"][${ATTR.wide}="1"]
+[data-uwc-composer-scroll-guard="1"]{
+  min-width:0!important;
+  max-width:100%!important;
+  box-sizing:border-box!important;
+  overflow-x:clip!important;
+}
+
+/* A horizontal scrollbar widget rendered as a sibling of the input needs
+   display:none rather than overflow clipping. Never hide input scrollbars. */
+:root[${ATTR.enabled}="1"][${ATTR.wide}="1"]
+[data-uwc-composer-scroll-guard="1"]:is([data-orientation="horizontal"],[role="scrollbar"][aria-orientation="horizontal"]){
+  display:none!important;
+}
+
+/* An @-mention can mount a narrow, full-width visual scrollbar as an
+   unlabelled adjacent DOM node. Only a geometry-verified element receives
+   this marker. Never use a broad selector that hides other ChatGPT controls. */
+:root[${ATTR.enabled}="1"][${ATTR.wide}="1"]
+[data-uwc-composer-visual-scrollbar="1"]{
+  display:none!important;
+}
+
+/* The @ suggestion menu (not a scrollbar) can be placed beneath the
+   composer by a clipped/incorrect floating-position context. Only menus
+   verified offscreen or clipped receive the repair marker. The menu's own
+   vertical scroll area must remain scrollable and interactive. */
+:root[${ATTR.enabled}="1"][${ATTR.wide}="1"]
+.composer-home-top-menu[data-uwc-mention-popup-repaired="1"]{
+  position:fixed!important;
+  inset:auto!important;
+  top:auto!important;
+  left:var(--uwc-mention-popup-left)!important;
+  right:auto!important;
+  bottom:var(--uwc-mention-popup-bottom)!important;
+  width:var(--uwc-mention-popup-width)!important;
+  max-width:calc(100vw - 16px)!important;
+  max-height:var(--uwc-mention-popup-height)!important;
+  height:auto!important;
+  min-height:0!important;
+  margin:0!important;
+  transform:none!important;
+  translate:none!important;
+  z-index:2147483000!important;
+  box-sizing:border-box!important;
+}
+:root[${ATTR.enabled}="1"][${ATTR.wide}="1"]
+.composer-home-top-menu[data-uwc-mention-popup-repaired="1"]
+[data-mention-list-scroll-area]{
+  min-height:0!important;
+  max-height:var(--uwc-mention-popup-height)!important;
+  overflow-y:auto!important;
+  overscroll-behavior-y:contain;
+}
+/* An ancestor can clip a correctly repositioned fixed popup when a
+   transformed parent creates its containing block. Release only the
+   tightly scoped, previously identified clipping ancestors while open. */
+:root[${ATTR.enabled}="1"][${ATTR.wide}="1"]
+[data-uwc-mention-clip-release="1"]{
+  overflow:visible!important;
+}
+
+/* Some builds render the thin bar as a native ::-webkit-scrollbar, with no
+   separate DOM element and without measurable scrollWidth overflow. Only
+   target the bounded composer subtree while an @ mention is in progress.
+   Never clip the scrollport itself or hide the suggestion popup. */
+:root[${ATTR.enabled}="1"][${ATTR.wide}="1"]
+[data-uwc-composer-mention-scroll-scope="1"]::-webkit-scrollbar:horizontal{
+  height:0!important;
+  display:none!important;
+}
+
 ` : ''}
- 
+
 :root[${ATTR.enabled}="1"][${ATTR.wide}="1"]
 [${ATTR.conversationRoot}="1"],
 :root[${ATTR.enabled}="1"][${ATTR.wide}="1"]
@@ -2970,7 +3172,7 @@ ${settings.widenComposer ? `
   min-width:0!important;
   box-sizing:border-box!important;
 }
- 
+
 :root[${ATTR.enabled}="1"][${ATTR.wide}="1"]
 [${ATTR.turn}="1"]{
   width:min(100%,var(--uwc-content-width))!important;
@@ -2979,19 +3181,19 @@ ${settings.widenComposer ? `
   margin-inline:auto!important;
   box-sizing:border-box!important;
 }
- 
+
 :root[${ATTR.enabled}="1"][${ATTR.wide}="1"]
 [${ATTR.turnPath}="1"]{
   min-width:0!important;
   box-sizing:border-box!important;
 }
- 
+
 :root[${ATTR.enabled}="1"][${ATTR.wide}="1"]
 [${ATTR.composerPath}="1"]{
   min-width:0!important;
   box-sizing:border-box!important;
 }
- 
+
 :root[${ATTR.enabled}="1"][${ATTR.wide}="1"]
 [${ATTR.composer}="1"]{
   width:min(100%,var(--uwc-content-width))!important;
@@ -3000,13 +3202,13 @@ ${settings.widenComposer ? `
   margin-inline:auto!important;
   box-sizing:border-box!important;
 }
- 
+
 :root[${ATTR.enabled}="1"][${ATTR.wide}="1"]
 [${ATTR.planNoticePath}="1"]{
   min-width:0!important;
   box-sizing:border-box!important;
 }
- 
+
 :root[${ATTR.enabled}="1"][${ATTR.wide}="1"]
 [${ATTR.planNotice}="1"]{
   width:min(100%,var(--uwc-content-width))!important;
@@ -3015,7 +3217,7 @@ ${settings.widenComposer ? `
   margin-inline:auto!important;
   box-sizing:border-box!important;
 }
- 
+
 :root[${ATTR.enabled}="1"][${ATTR.wide}="1"][${ATTR.canvas}="1"]
 [${ATTR.turn}="1"],
 :root[${ATTR.enabled}="1"][${ATTR.wide}="1"][${ATTR.canvas}="1"]
@@ -3027,19 +3229,19 @@ ${settings.widenComposer ? `
     100% - (var(--uwc-gutter) * 2)
   )!important;
 }
- 
+
 :root[${ATTR.enabled}="1"][${ATTR.left}="1"]
 [${ATTR.turn}="1"]{
   text-align:left!important;
 }
- 
+
 :root[${ATTR.enabled}="1"][${ATTR.left}="1"]
 [${ATTR.composer}="1"] textarea,
 :root[${ATTR.enabled}="1"][${ATTR.left}="1"]
 [${ATTR.composer}="1"] [contenteditable="true"]{
   text-align:left!important;
 }
- 
+
 /* When the current virtualized transcript root is present, it owns the
    configured width. Turn markers inside it must stay full-width so nested
    percentages cannot compound and shrink the conversation. */
@@ -3050,44 +3252,61 @@ ${settings.widenComposer ? `
   min-width:0!important;
   margin-inline:0!important;
 }
- 
+
 /* The current composer root is structural. Keep it full-width and let the
    inner thread-variable wrapper carry the configured UltraWide width. */
 :root[${ATTR.enabled}="1"][${ATTR.wide}="1"]
 #thread-bottom-container[${ATTR.composer}="1"]{
   width:100%!important;
-  max-width:none!important;
+  max-width:100%!important;
   min-width:0!important;
   margin-inline:0!important;
 }
- 
+
 /* Current virtualized assistant/user message markers. */
 :root[${ATTR.enabled}="1"][${ATTR.wide}="1"]
-[data-markdown-text-style="assistant-message"]{
+${inPane}[data-markdown-text-style="assistant-message"]{
   width:100%!important;
   max-width:none!important;
   min-width:0!important;
   box-sizing:border-box!important;
 }
- 
+
 :root[${ATTR.enabled}="1"][${ATTR.left}="1"]
-[data-markdown-text-style="assistant-message"]{
+${inPane}[data-markdown-text-style="assistant-message"]{
   text-align:left!important;
 }
- 
+
 :root[${ATTR.enabled}="1"][${ATTR.wide}="1"]
-[data-user-message-bubble="true"]{
+${inPane}[data-user-message-bubble="true"]{
   max-width:min(var(--user-chat-width,80%),var(--uwc-content-width))!important;
 }
- 
+
 ${safeMediaCss}
- 
+
+/* Keep structured tables native and scroll wide content inside the widget.
+   Table wrapper sizing also applies when optional safe media is disabled. */
+:root[${ATTR.enabled}="1"][${ATTR.wide}="1"]
+${assistantTurn} ${tableContainer}:has(> ${tableScroller}),
+:root[${ATTR.enabled}="1"][${ATTR.wide}="1"]
+${structuredTableScroller}{
+  width:100%!important;
+  min-width:0!important;
+  max-width:100%!important;
+  box-sizing:border-box!important;
+}
+
+:root[${ATTR.enabled}="1"][${ATTR.wide}="1"]
+${structuredTableScroller}{
+  overflow-x:auto!important;
+}
+
 @media (max-width:1099px), (max-height:559px){
   :root[${ATTR.version}="${VERSION}"]{
     --uwc-gutter:12px;
   }
 }
- 
+
 @media print{
   :root[${ATTR.enabled}="1"]
   [${ATTR.turn}="1"]{
@@ -3096,719 +3315,124 @@ ${safeMediaCss}
   }
 }`.trim();
   }
- 
+
   function buildUiCss() {
     return `
-#${ID.toast}{
-  --uwc-ui-bg:var(--main-surface-primary,Canvas);
-  --uwc-ui-text:var(--text-primary,CanvasText);
-  position:fixed!important;
-  right:18px!important;
-  bottom:18px!important;
-  z-index:2147483647!important;
-  max-width:min(440px,calc(100vw - 36px))!important;
-  padding:11px 14px!important;
-  border:1px solid var(--border-light,color-mix(in srgb,var(--uwc-ui-text) 12%,transparent))!important;
-  border-radius:13px!important;
-  background:color-mix(in srgb,var(--uwc-ui-bg) 96%,transparent)!important;
-  color:var(--uwc-ui-text)!important;
-  box-shadow:0 14px 40px rgba(0,0,0,.24)!important;
-  font:13px/1.4 ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif!important;
-  pointer-events:none!important;
-  backdrop-filter:blur(18px) saturate(1.15)!important;
-}
- 
-#${ID.debugOverlay}{
-  --uwc-debug-bg:rgba(12,18,22,.9);
-  --uwc-debug-text:#d8fff4;
-  --uwc-debug-border:rgba(16,163,127,.46);
-  position:fixed!important;
-  left:16px!important;
-  bottom:16px!important;
-  z-index:2147483645!important;
-  display:grid!important;
-  gap:4px!important;
-  max-width:min(440px,calc(100vw - 32px))!important;
-  padding:10px 12px!important;
-  border:1px solid var(--uwc-debug-border)!important;
-  border-radius:12px!important;
-  background:var(--uwc-debug-bg)!important;
-  color:var(--uwc-debug-text)!important;
-  box-shadow:0 14px 36px rgba(0,0,0,.28)!important;
-  font:11px/1.35 ui-monospace,SFMono-Regular,Consolas,monospace!important;
-  pointer-events:none!important;
-  backdrop-filter:blur(14px)!important;
-}
- 
-#${ID.debugOverlay} strong{
-  font-weight:700!important;
-  color:#fff!important;
-}
- 
-#${ID.modal}{
-  --uwc-accent:#10a37f;
-  --uwc-accent-strong:#0d8f70;
-  --uwc-danger:#ef4444;
-  --uwc-warning:#d97706;
-  --uwc-ui-bg:var(--main-surface-primary,Canvas);
-  --uwc-ui-bg-secondary:var(--main-surface-secondary,color-mix(in srgb,CanvasText 4%,Canvas));
-  --uwc-ui-bg-tertiary:var(--main-surface-tertiary,color-mix(in srgb,CanvasText 7%,Canvas));
-  --uwc-ui-text:var(--text-primary,CanvasText);
-  --uwc-ui-muted:var(--text-secondary,color-mix(in srgb,CanvasText 62%,transparent));
-  --uwc-ui-border:var(--border-light,color-mix(in srgb,CanvasText 11%,transparent));
-  --uwc-ui-border-strong:var(--border-medium,color-mix(in srgb,CanvasText 19%,transparent));
-  position:fixed!important;
-  inset:0!important;
-  z-index:2147483646!important;
-  display:flex!important;
-  align-items:center!important;
-  justify-content:center!important;
-  padding:22px!important;
-  background:rgba(0,0,0,.58)!important;
-  color:var(--uwc-ui-text)!important;
-  font:14px/1.45 ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif!important;
-  backdrop-filter:blur(7px)!important;
-}
- 
-#${ID.modal} *{
-  box-sizing:border-box!important;
-}
- 
-#${ID.modal} .uwc-panel{
-  width:min(920px,100%)!important;
-  max-height:min(92vh,960px)!important;
-  overflow:auto!important;
-  overscroll-behavior:contain!important;
-  scrollbar-gutter:stable!important;
-  border:1px solid var(--uwc-ui-border)!important;
-  border-radius:20px!important;
-  background:var(--uwc-ui-bg)!important;
-  color:var(--uwc-ui-text)!important;
-  box-shadow:
-    0 32px 100px rgba(0,0,0,.42),
-    0 4px 18px rgba(0,0,0,.16)!important;
-}
- 
-#${ID.modal} .uwc-header{
-  position:sticky!important;
-  top:0!important;
-  z-index:4!important;
-  display:flex!important;
-  align-items:center!important;
-  justify-content:space-between!important;
-  gap:18px!important;
-  padding:17px 20px!important;
-  border-bottom:1px solid var(--uwc-ui-border)!important;
-  background:color-mix(in srgb,var(--uwc-ui-bg) 95%,transparent)!important;
-  backdrop-filter:blur(20px) saturate(1.1)!important;
-}
- 
-#${ID.modal} .uwc-header-copy{
-  min-width:0!important;
-}
- 
-#${ID.modal} .uwc-title-row{
-  display:flex!important;
-  align-items:center!important;
-  flex-wrap:wrap!important;
-  gap:9px!important;
-}
- 
-#${ID.modal} .uwc-title{
-  margin:0!important;
-  font-size:19px!important;
-  line-height:1.2!important;
-  font-weight:680!important;
-  letter-spacing:-.018em!important;
-}
- 
-#${ID.modal} .uwc-version{
-  display:inline-flex!important;
-  align-items:center!important;
-  min-height:22px!important;
-  padding:2px 8px!important;
-  border:1px solid var(--uwc-ui-border)!important;
-  border-radius:999px!important;
-  background:var(--uwc-ui-bg-secondary)!important;
-  color:var(--uwc-ui-muted)!important;
-  font:600 11px/1 ui-monospace,SFMono-Regular,Consolas,monospace!important;
-}
- 
-#${ID.modal} .uwc-subtitle{
-  margin:4px 0 0!important;
-  color:var(--uwc-ui-muted)!important;
-  font-size:12px!important;
-}
- 
-#${ID.modal} .uwc-close{
-  display:grid!important;
-  place-items:center!important;
-  width:36px!important;
-  min-width:36px!important;
-  height:36px!important;
-  padding:0!important;
-  border:1px solid transparent!important;
-  border-radius:10px!important;
-  background:transparent!important;
-  color:var(--uwc-ui-muted)!important;
-  font-size:20px!important;
-  font-weight:400!important;
-}
- 
-#${ID.modal} .uwc-close:hover{
-  border-color:var(--uwc-ui-border)!important;
-  background:var(--uwc-ui-bg-secondary)!important;
-  color:var(--uwc-ui-text)!important;
-}
- 
-#${ID.modal} .uwc-body{
-  padding:18px 20px 0!important;
-}
- 
-#${ID.modal} .uwc-status{
-  display:flex!important;
-  align-items:center!important;
-  justify-content:space-between!important;
-  gap:14px!important;
-  margin:0 0 12px!important;
-  padding:14px 15px!important;
-  border:1px solid color-mix(in srgb,var(--uwc-accent) 25%,var(--uwc-ui-border))!important;
-  border-radius:15px!important;
-  background:
-    linear-gradient(135deg,
-      color-mix(in srgb,var(--uwc-accent) 8%,var(--uwc-ui-bg)),
-      var(--uwc-ui-bg-secondary))!important;
-}
- 
-#${ID.modal} .uwc-status[data-state="inactive"]{
-  border-color:var(--uwc-ui-border)!important;
-  background:var(--uwc-ui-bg-secondary)!important;
-}
- 
-#${ID.modal} .uwc-status-main{
-  display:grid!important;
-  grid-template-columns:auto minmax(0,1fr)!important;
-  gap:2px 10px!important;
-  min-width:0!important;
-}
- 
-#${ID.modal} .uwc-status-main::before{
-  content:""!important;
-  grid-row:1 / span 2!important;
-  align-self:start!important;
-  width:9px!important;
-  height:9px!important;
-  margin-top:5px!important;
-  border-radius:999px!important;
-  background:var(--uwc-accent)!important;
-  box-shadow:0 0 0 4px color-mix(in srgb,var(--uwc-accent) 14%,transparent)!important;
-}
- 
-#${ID.modal} .uwc-status[data-state="inactive"] .uwc-status-main::before{
-  background:var(--uwc-ui-muted)!important;
-  box-shadow:none!important;
-}
- 
-#${ID.modal} .uwc-status strong{
-  color:var(--uwc-ui-text)!important;
-  font-weight:650!important;
-}
- 
-#${ID.modal} .uwc-status-detail{
-  color:var(--uwc-ui-muted)!important;
-  font-size:11px!important;
-  white-space:normal!important;
-}
- 
-#${ID.modal} .uwc-health-pill{
-  display:inline-flex!important;
-  align-items:center!important;
-  justify-content:center!important;
-  min-width:74px!important;
-  min-height:30px!important;
-  padding:5px 9px!important;
-  border:1px solid color-mix(in srgb,var(--uwc-accent) 32%,var(--uwc-ui-border))!important;
-  border-radius:999px!important;
-  background:color-mix(in srgb,var(--uwc-accent) 8%,var(--uwc-ui-bg))!important;
-  color:var(--uwc-ui-text)!important;
-  font:650 11px/1 ui-monospace,SFMono-Regular,Consolas,monospace!important;
-  white-space:nowrap!important;
-}
- 
-#${ID.modal} .uwc-overview{
-  display:grid!important;
-  grid-template-columns:repeat(6,minmax(0,1fr))!important;
-  gap:8px!important;
-  margin:0 0 14px!important;
-}
- 
-#${ID.modal} .uwc-metric{
-  min-width:0!important;
-  padding:10px!important;
-  border:1px solid var(--uwc-ui-border)!important;
-  border-radius:12px!important;
-  background:var(--uwc-ui-bg-secondary)!important;
-}
- 
-#${ID.modal} .uwc-metric-label{
-  display:block!important;
-  margin-bottom:4px!important;
-  color:var(--uwc-ui-muted)!important;
-  font-size:9px!important;
-  font-weight:650!important;
-  text-transform:uppercase!important;
-  letter-spacing:.07em!important;
-}
- 
-#${ID.modal} .uwc-metric-value{
-  display:block!important;
-  overflow:hidden!important;
-  color:var(--uwc-ui-text)!important;
-  font:650 12px/1.25 ui-monospace,SFMono-Regular,Consolas,monospace!important;
-  text-overflow:ellipsis!important;
-  white-space:nowrap!important;
-}
- 
-#${ID.modal} .uwc-section{
-  margin:0 0 12px!important;
-  padding:14px!important;
-  border:1px solid var(--uwc-ui-border)!important;
-  border-radius:14px!important;
-  background:var(--uwc-ui-bg-secondary)!important;
-}
- 
-#${ID.modal} .uwc-section h3{
-  margin:0 0 11px!important;
-  color:var(--uwc-ui-muted)!important;
-  font-size:10px!important;
-  line-height:1.2!important;
-  font-weight:700!important;
-  text-transform:uppercase!important;
-  letter-spacing:.08em!important;
-}
- 
-#${ID.modal} .uwc-grid{
-  display:grid!important;
-  grid-template-columns:repeat(2,minmax(0,1fr))!important;
-  gap:8px!important;
-}
- 
-#${ID.modal} .uwc-field{
-  display:flex!important;
-  flex-direction:column!important;
-  justify-content:center!important;
-  gap:6px!important;
-  min-height:58px!important;
-  padding:9px 10px!important;
-  border:1px solid transparent!important;
-  border-radius:11px!important;
-  background:var(--uwc-ui-bg)!important;
-}
- 
-#${ID.modal} .uwc-field:focus-within{
-  border-color:color-mix(in srgb,var(--uwc-accent) 48%,var(--uwc-ui-border))!important;
-}
- 
-#${ID.modal} .uwc-check{
-  display:grid!important;
-  grid-template-columns:minmax(0,1fr) auto!important;
-  grid-template-areas:"copy toggle"!important;
-  align-items:center!important;
-  gap:12px!important;
-  min-height:58px!important;
-  padding:9px 10px!important;
-  border:1px solid transparent!important;
-  border-radius:11px!important;
-  background:var(--uwc-ui-bg)!important;
-  cursor:pointer!important;
-  transition:
-    background-color .14s ease,
-    border-color .14s ease,
-    box-shadow .14s ease!important;
-}
- 
-#${ID.modal} .uwc-check:hover{
-  border-color:var(--uwc-ui-border)!important;
-  background:var(--uwc-ui-bg-tertiary)!important;
-}
- 
-#${ID.modal} .uwc-check:has(input:focus-visible){
-  border-color:color-mix(in srgb,var(--uwc-accent) 65%,var(--uwc-ui-border))!important;
-  box-shadow:0 0 0 3px color-mix(in srgb,var(--uwc-accent) 14%,transparent)!important;
-}
- 
-#${ID.modal} .uwc-check input[type="checkbox"]{
-  position:absolute!important;
-  width:1px!important;
-  min-width:1px!important;
-  height:1px!important;
-  min-height:1px!important;
-  margin:0!important;
-  padding:0!important;
-  opacity:0!important;
-  pointer-events:none!important;
-}
- 
-#${ID.modal} .uwc-check-copy{
-  grid-area:copy!important;
-  min-width:0!important;
-  color:var(--uwc-ui-text)!important;
-  font-weight:520!important;
-}
- 
-#${ID.modal} .uwc-toggle-state{
-  grid-area:toggle!important;
-  position:relative!important;
-  display:inline-flex!important;
-  width:40px!important;
-  min-width:40px!important;
-  height:23px!important;
-  padding:0!important;
-  overflow:hidden!important;
-  border:1px solid var(--uwc-ui-border-strong)!important;
-  border-radius:999px!important;
-  background:var(--uwc-ui-bg-tertiary)!important;
-  color:transparent!important;
-  font-size:0!important;
-  transition:
-    background-color .16s ease,
-    border-color .16s ease!important;
-}
- 
-#${ID.modal} .uwc-toggle-state::after{
-  content:""!important;
-  position:absolute!important;
-  left:3px!important;
-  top:3px!important;
-  width:15px!important;
-  height:15px!important;
-  border-radius:999px!important;
-  background:var(--uwc-ui-muted)!important;
-  transition:
-    transform .16s ease,
-    background-color .16s ease!important;
-}
- 
-#${ID.modal} .uwc-check input:checked ~ .uwc-toggle-state{
-  border-color:var(--uwc-accent)!important;
-  background:var(--uwc-accent)!important;
-}
- 
-#${ID.modal} .uwc-check input:checked ~ .uwc-toggle-state::after{
-  transform:translateX(17px)!important;
-  background:#fff!important;
-}
- 
-#${ID.modal} label{
-  font-weight:520!important;
-}
- 
-#${ID.modal} .uwc-hint{
-  display:block!important;
-  margin-top:2px!important;
-  color:var(--uwc-ui-muted)!important;
-  font-size:10.5px!important;
-  line-height:1.35!important;
-  font-weight:400!important;
-}
- 
-#${ID.modal} input,
-#${ID.modal} select,
-#${ID.modal} textarea,
-#${ID.modal} button{
-  color:var(--uwc-ui-text)!important;
-  font:13px/1.4 ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif!important;
-}
- 
-#${ID.modal} input:not([type="checkbox"]),
-#${ID.modal} select,
-#${ID.modal} textarea{
-  width:100%!important;
-  min-height:36px!important;
-  padding:7px 10px!important;
-  border:1px solid var(--uwc-ui-border-strong)!important;
-  border-radius:9px!important;
-  outline:none!important;
-  background:var(--uwc-ui-bg)!important;
-}
- 
-#${ID.modal} select{
-  cursor:pointer!important;
-}
- 
-#${ID.modal} input:not([type="checkbox"]):hover,
-#${ID.modal} select:hover,
-#${ID.modal} textarea:hover{
-  border-color:color-mix(in srgb,var(--uwc-ui-text) 25%,var(--uwc-ui-border))!important;
-}
- 
-#${ID.modal} input:not([type="checkbox"]):focus,
-#${ID.modal} select:focus,
-#${ID.modal} textarea:focus{
-  border-color:var(--uwc-accent)!important;
-  box-shadow:0 0 0 3px color-mix(in srgb,var(--uwc-accent) 13%,transparent)!important;
-}
- 
-#${ID.modal} button{
-  min-height:36px!important;
-  padding:7px 12px!important;
-  border:1px solid var(--uwc-ui-border)!important;
-  border-radius:9px!important;
-  background:var(--uwc-ui-bg)!important;
-  cursor:pointer!important;
-  font-weight:560!important;
-  transition:
-    background-color .14s ease,
-    border-color .14s ease,
-    transform .08s ease!important;
-}
- 
-#${ID.modal} button:hover{
-  background:var(--uwc-ui-bg-tertiary)!important;
-  border-color:var(--uwc-ui-border-strong)!important;
-}
- 
-#${ID.modal} button:active{
-  transform:scale(.985)!important;
-}
- 
-#${ID.modal} button:focus-visible,
-#${ID.modal} input:focus-visible,
-#${ID.modal} select:focus-visible,
-#${ID.modal} summary:focus-visible{
-  outline:2px solid color-mix(in srgb,var(--uwc-accent) 72%,transparent)!important;
-  outline-offset:2px!important;
-}
- 
-#${ID.modal} .uwc-primary{
-  border-color:var(--uwc-accent)!important;
-  background:var(--uwc-accent)!important;
-  color:#fff!important;
-}
- 
-#${ID.modal} .uwc-primary:hover{
-  border-color:var(--uwc-accent-strong)!important;
-  background:var(--uwc-accent-strong)!important;
-}
- 
-#${ID.modal} .uwc-danger{
-  color:var(--uwc-danger)!important;
-}
- 
-#${ID.modal} .uwc-danger:hover{
-  border-color:color-mix(in srgb,var(--uwc-danger) 34%,var(--uwc-ui-border))!important;
-  background:color-mix(in srgb,var(--uwc-danger) 7%,var(--uwc-ui-bg))!important;
-}
- 
-#${ID.modal} .uwc-health-breakdown{
-  display:grid!important;
-  grid-template-columns:repeat(6,minmax(0,1fr))!important;
-  gap:7px!important;
-  margin:0 0 12px!important;
-}
- 
-#${ID.modal} .uwc-health-item{
-  display:flex!important;
-  align-items:center!important;
-  justify-content:space-between!important;
-  gap:8px!important;
-  min-width:0!important;
-  padding:8px 9px!important;
-  border:1px solid var(--uwc-ui-border)!important;
-  border-radius:10px!important;
-  background:var(--uwc-ui-bg)!important;
-}
- 
-#${ID.modal} .uwc-health-label{
-  overflow:hidden!important;
-  color:var(--uwc-ui-muted)!important;
-  font-size:9px!important;
-  font-weight:650!important;
-  text-overflow:ellipsis!important;
-  text-transform:uppercase!important;
-  letter-spacing:.05em!important;
-  white-space:nowrap!important;
-}
- 
-#${ID.modal} .uwc-health-value{
-  color:var(--uwc-ui-text)!important;
-  font:700 11px/1 ui-monospace,SFMono-Regular,Consolas,monospace!important;
-}
- 
-#${ID.modal} .uwc-advanced{
-  margin:0 0 12px!important;
-  overflow:hidden!important;
-  border:1px solid var(--uwc-ui-border)!important;
-  border-radius:14px!important;
-  background:var(--uwc-ui-bg-secondary)!important;
-}
- 
-#${ID.modal} .uwc-advanced > summary{
-  display:flex!important;
-  align-items:center!important;
-  justify-content:space-between!important;
-  gap:12px!important;
-  min-height:46px!important;
-  padding:12px 14px!important;
-  cursor:pointer!important;
-  color:var(--uwc-ui-text)!important;
-  font-weight:620!important;
-  list-style:none!important;
-}
- 
-#${ID.modal} .uwc-advanced > summary::-webkit-details-marker{
-  display:none!important;
-}
- 
-#${ID.modal} .uwc-advanced > summary::after{
-  content:"+"!important;
-  color:var(--uwc-ui-muted)!important;
-  font:600 17px/1 ui-monospace,SFMono-Regular,Consolas,monospace!important;
-}
- 
-#${ID.modal} .uwc-advanced[open] > summary::after{
-  content:"−"!important;
-}
- 
-#${ID.modal} .uwc-advanced-body{
-  padding:0 12px 12px!important;
-}
- 
-#${ID.modal} .uwc-advanced-body .uwc-section{
-  margin-bottom:8px!important;
-}
- 
-#${ID.modal} .uwc-shortcuts{
-  display:grid!important;
-  grid-template-columns:repeat(4,minmax(0,1fr))!important;
-  gap:7px!important;
-}
- 
-#${ID.modal} .uwc-shortcuts span{
-  display:flex!important;
-  align-items:center!important;
-  min-height:33px!important;
-  padding:7px 9px!important;
-  border:1px solid var(--uwc-ui-border)!important;
-  border-radius:9px!important;
-  background:var(--uwc-ui-bg)!important;
-  color:var(--uwc-ui-muted)!important;
-  font:11px/1.3 ui-monospace,SFMono-Regular,Consolas,monospace!important;
-}
- 
-#${ID.modal} .uwc-inline-actions{
-  display:flex!important;
-  flex-wrap:wrap!important;
-  gap:8px!important;
-  padding:4px 0 0!important;
-}
- 
-#${ID.modal} .uwc-actions{
-  position:sticky!important;
-  bottom:0!important;
-  z-index:4!important;
-  display:flex!important;
-  flex-wrap:wrap!important;
-  align-items:center!important;
-  justify-content:flex-end!important;
-  gap:8px!important;
-  margin:16px -20px 0!important;
-  padding:13px 20px!important;
-  border-top:1px solid var(--uwc-ui-border)!important;
-  background:color-mix(in srgb,var(--uwc-ui-bg) 95%,transparent)!important;
-  backdrop-filter:blur(20px) saturate(1.1)!important;
-}
- 
-#${ID.modal} .uwc-actions::before{
-  content:"Settings save automatically. Closing applies persisted changes."!important;
-  margin-right:auto!important;
-  color:var(--uwc-ui-muted)!important;
-  font-size:10.5px!important;
-  line-height:1.35!important;
-}
- 
-@media (max-width:900px){
-  #${ID.modal} .uwc-overview,
-  #${ID.modal} .uwc-health-breakdown{
-    grid-template-columns:repeat(3,minmax(0,1fr))!important;
+#${ID.toast}{position:fixed!important;right:20px!important;bottom:20px!important;z-index:2147483647!important;max-width:min(420px,calc(100vw - 32px))!important;padding:12px 16px!important;border:1px solid var(--border-light,#454545)!important;border-radius:12px!important;background:var(--main-surface-primary,#212121)!important;color:var(--text-primary,#f4f4f4)!important;box-shadow:0 16px 56px #0006!important;font:13px/1.5 ui-sans-serif,system-ui,sans-serif!important;pointer-events:none!important}
+#${ID.debugOverlay}{position:fixed!important;left:16px!important;bottom:16px!important;z-index:2147483645!important;display:grid!important;gap:4px!important;max-width:min(440px,calc(100vw - 32px))!important;padding:12px!important;border:1px solid #454545!important;border-radius:12px!important;background:#181818!important;color:#e5e5e5!important;box-shadow:0 18px 48px #0008!important;font:11px/1.4 ui-monospace,monospace!important;pointer-events:none!important}
+#${ID.modal}{--uwc-accent:#10a37f;--uwc-accent-strong:#0d9270;--uwc-danger:#d95454;--uwc-ui-bg:var(--main-surface-primary,#212121);--uwc-ui-bg-secondary:var(--main-surface-secondary,#272727);--uwc-ui-bg-tertiary:var(--main-surface-tertiary,#333);--uwc-ui-text:var(--text-primary,#f4f4f4);--uwc-ui-muted:var(--text-secondary,#a6a6a6);--uwc-ui-border:var(--border-light,#404040);--uwc-ui-border-strong:var(--border-medium,#565656);position:fixed!important;inset:0!important;z-index:2147483646!important;display:flex!important;align-items:center!important;justify-content:center!important;padding:24px!important;background:rgba(0,0,0,.64)!important;color:var(--uwc-ui-text)!important;font:14px/1.5 ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif!important;backdrop-filter:blur(5px)!important}
+#${ID.modal} *,#${ID.modal} *::before,#${ID.modal} *::after{box-sizing:border-box!important}
+#${ID.modal} .uwc-panel{width:min(760px,100%)!important;max-height:min(90dvh,900px)!important;overflow-y:auto!important;overflow-x:hidden!important;overscroll-behavior:contain!important;border:1px solid var(--uwc-ui-border)!important;border-radius:18px!important;background:var(--uwc-ui-bg)!important;color:var(--uwc-ui-text)!important;box-shadow:0 28px 100px #0008!important;scrollbar-width:thin!important}
+#${ID.modal} .uwc-header{position:sticky!important;top:0!important;z-index:5!important;display:flex!important;align-items:center!important;justify-content:space-between!important;gap:16px!important;min-height:88px!important;padding:18px 28px!important;border-bottom:1px solid var(--uwc-ui-border)!important;background:var(--uwc-ui-bg)!important}
+#${ID.modal} .uwc-header-copy{min-width:0!important}
+#${ID.modal} .uwc-title-row{display:flex!important;align-items:center!important;gap:10px!important;flex-wrap:wrap!important}
+#${ID.modal} .uwc-title{margin:0!important;font-size:20px!important;line-height:1.25!important;letter-spacing:-.035em!important;font-weight:680!important;color:var(--uwc-ui-text)!important}
+#${ID.modal} .uwc-version{display:inline-flex!important;align-items:center!important;min-height:21px!important;padding:2px 7px!important;border:1px solid var(--uwc-ui-border)!important;border-radius:6px!important;color:var(--uwc-ui-muted)!important;font:550 11px/1.3 ui-monospace,SFMono-Regular,Consolas,monospace!important}
+#${ID.modal} .uwc-subtitle{margin:5px 0 0!important;color:var(--uwc-ui-muted)!important;font-size:12px!important}
+#${ID.modal} button{font:550 13px/1.35 ui-sans-serif,system-ui,sans-serif!important;color:var(--uwc-ui-text)!important;min-height:36px!important;padding:8px 12px!important;border:1px solid var(--uwc-ui-border)!important;border-radius:9px!important;background:transparent!important;cursor:pointer!important;transition:background-color .14s,border-color .14s!important}
+#${ID.modal} button:hover{background:var(--uwc-ui-bg-tertiary)!important;border-color:var(--uwc-ui-border-strong)!important}
+#${ID.modal} button:disabled{opacity:.45!important;cursor:not-allowed!important}
+#${ID.modal} .uwc-close{display:grid!important;place-items:center!important;flex:none!important;width:36px!important;min-width:36px!important;height:36px!important;padding:0!important;border:0!important;border-radius:9px!important;background:transparent!important;font-size:23px!important;font-weight:350!important;color:var(--uwc-ui-muted)!important}
+#${ID.modal} .uwc-body{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;column-gap:24px!important;row-gap:0!important;padding:22px 28px 0!important}
+#${ID.modal} .uwc-status{grid-column:1/-1!important;display:flex!important;align-items:center!important;justify-content:space-between!important;gap:16px!important;margin:0 0 26px!important;padding:14px 16px!important;border:1px solid var(--uwc-ui-border)!important;border-radius:12px!important;background:var(--uwc-ui-bg-secondary)!important}
+#${ID.modal} .uwc-status-main{display:grid!important;grid-template-columns:8px minmax(0,1fr)!important;gap:2px 11px!important;align-items:start!important;min-width:0!important}
+#${ID.modal} .uwc-status-main::before{content:""!important;grid-row:1/span 2!important;align-self:start!important;width:8px!important;height:8px!important;margin-top:6px!important;border-radius:50%!important;background:var(--uwc-accent)!important}
+#${ID.modal} .uwc-status[data-state="inactive"] .uwc-status-main::before{background:var(--uwc-ui-muted)!important}
+#${ID.modal} .uwc-status strong{font-size:13px!important;font-weight:640!important}
+#${ID.modal} .uwc-status-detail{font-size:12px!important;color:var(--uwc-ui-muted)!important;line-height:1.4!important}
+#${ID.modal} .uwc-health-pill{flex:none!important;display:inline-flex!important;align-items:center!important;min-height:28px!important;padding:4px 9px!important;border:1px solid var(--uwc-ui-border)!important;border-radius:7px!important;font:550 11px/1.2 ui-monospace,monospace!important;color:var(--uwc-ui-muted)!important;white-space:nowrap!important}
+#${ID.modal} .uwc-section{min-width:0!important;margin:0 0 25px!important;padding:0!important;border:0!important;background:transparent!important}
+#${ID.modal} .uwc-section h3{display:flex!important;align-items:center!important;gap:10px!important;margin:0 0 11px!important;padding:0 0 9px!important;border-bottom:1px solid var(--uwc-ui-border)!important;font-size:13px!important;font-weight:660!important;line-height:1.4!important;letter-spacing:-.01em!important;color:var(--uwc-ui-text)!important;text-transform:none!important}
+#${ID.modal} .uwc-section[data-section="layout"]{grid-column:1/-1!important}
+#${ID.modal} .uwc-grid{display:grid!important;grid-template-columns:1fr!important;gap:3px!important}
+#${ID.modal} .uwc-section[data-section="layout"]>.uwc-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;column-gap:14px!important}
+#${ID.modal} .uwc-check{position:relative!important;display:grid!important;grid-template-columns:minmax(0,1fr) 38px!important;align-items:center!important;gap:12px!important;min-height:49px!important;padding:10px 8px!important;border-radius:9px!important;cursor:pointer!important;color:var(--uwc-ui-text)!important;transition:background-color .12s!important}
+#${ID.modal} .uwc-check:hover{background:var(--uwc-ui-bg-secondary)!important}
+#${ID.modal} .uwc-check:has(input:focus-visible){outline:2px solid var(--uwc-accent)!important;outline-offset:1px!important}
+#${ID.modal} .uwc-check input[type="checkbox"]{position:absolute!important;width:1px!important;height:1px!important;opacity:0!important;pointer-events:none!important}
+#${ID.modal} .uwc-check-copy{min-width:0!important;font-size:13px!important;font-weight:480!important;line-height:1.4!important}
+#${ID.modal} .uwc-toggle-state{position:relative!important;display:block!important;flex:none!important;width:36px!important;height:21px!important;overflow:hidden!important;border-radius:30px!important;border:1px solid var(--uwc-ui-border-strong)!important;background:var(--uwc-ui-bg-tertiary)!important;font-size:0!important;color:transparent!important}
+#${ID.modal} .uwc-toggle-state::after{content:""!important;position:absolute!important;left:3px!important;top:3px!important;width:13px!important;height:13px!important;border-radius:50%!important;background:var(--uwc-ui-muted)!important;transition:transform .16s,background-color .16s!important}
+#${ID.modal} .uwc-check input:checked~.uwc-toggle-state{background:var(--uwc-accent)!important;border-color:var(--uwc-accent)!important}
+#${ID.modal} .uwc-check input:checked~.uwc-toggle-state::after{background:#fff!important;transform:translateX(15px)!important}
+#${ID.modal} .uwc-field{display:flex!important;flex-direction:column!important;justify-content:center!important;gap:6px!important;min-width:0!important;min-height:72px!important;padding:9px 8px!important;border-radius:9px!important}
+#${ID.modal} .uwc-field>label{font-size:12px!important;font-weight:560!important}
+#${ID.modal} .uwc-hint{display:block!important;margin-top:3px!important;font-size:11px!important;font-weight:400!important;line-height:1.4!important;color:var(--uwc-ui-muted)!important}
+#${ID.modal} .uwc-field input:not([type="checkbox"]),#${ID.modal} select,#${ID.modal} textarea{width:100%!important;min-width:0!important;min-height:37px!important;padding:8px 10px!important;border:1px solid var(--uwc-ui-border)!important;border-radius:8px!important;outline:0!important;background:var(--uwc-ui-bg-secondary)!important;color:var(--uwc-ui-text)!important;font:13px/1.4 ui-sans-serif,system-ui,sans-serif!important}
+#${ID.modal} .uwc-field input:hover,#${ID.modal} select:hover{border-color:var(--uwc-ui-border-strong)!important}
+#${ID.modal} .uwc-field input:focus,#${ID.modal} select:focus{border-color:var(--uwc-accent)!important;box-shadow:0 0 0 2px color-mix(in srgb,var(--uwc-accent) 17%,transparent)!important}
+#${ID.modal} button:focus-visible,#${ID.modal} input:focus-visible,#${ID.modal} select:focus-visible,#${ID.modal} summary:focus-visible{outline:2px solid var(--uwc-accent)!important;outline-offset:3px!important}
+#${ID.modal} .uwc-primary{border-color:var(--uwc-accent)!important;background:var(--uwc-accent)!important;color:white!important}
+#${ID.modal} .uwc-primary:hover{border-color:var(--uwc-accent-strong)!important;background:var(--uwc-accent-strong)!important}
+#${ID.modal} .uwc-danger{color:var(--uwc-danger)!important}
+#${ID.modal} .uwc-advanced{grid-column:1/-1!important;min-width:0!important;margin:0 0 18px!important;border-top:1px solid var(--uwc-ui-border)!important;background:transparent!important}
+#${ID.modal} .uwc-advanced>summary{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:12px!important;min-height:50px!important;padding:12px 0!important;cursor:pointer!important;list-style:none!important;font-size:13px!important;font-weight:630!important}
+#${ID.modal} .uwc-advanced>summary::-webkit-details-marker{display:none!important}
+#${ID.modal} .uwc-advanced>summary::after{content:"⌄"!important;color:var(--uwc-ui-muted)!important;font-size:20px!important;line-height:1!important;transition:transform .16s!important}
+#${ID.modal} .uwc-advanced[open]>summary::after{transform:rotate(180deg)!important}
+#${ID.modal} .uwc-advanced:not([open])>.uwc-advanced-body{display:none!important}
+#${ID.modal} .uwc-advanced-body{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:0 20px!important;padding:12px 0 0!important}
+#${ID.modal} .uwc-advanced-body>.uwc-section{margin-bottom:20px!important}
+#${ID.modal} .uwc-overview,#${ID.modal} .uwc-health-breakdown{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;grid-column:1/-1!important;gap:8px!important;margin:0 0 16px!important}
+#${ID.modal} .uwc-metric,#${ID.modal} .uwc-health-item{min-width:0!important;padding:10px 12px!important;border-radius:9px!important;background:var(--uwc-ui-bg-secondary)!important;border:1px solid var(--uwc-ui-border)!important}
+#${ID.modal} .uwc-metric-label,#${ID.modal} .uwc-health-label{display:block!important;margin-bottom:4px!important;color:var(--uwc-ui-muted)!important;font-size:10px!important;font-weight:550!important;letter-spacing:0!important;text-transform:none!important;white-space:normal!important}
+#${ID.modal} .uwc-metric-value,#${ID.modal} .uwc-health-value{display:block!important;color:var(--uwc-ui-text)!important;font:600 12px/1.4 ui-monospace,monospace!important;overflow-wrap:anywhere!important}
+#${ID.modal} .uwc-health-item{display:flex!important;justify-content:space-between!important;gap:8px!important}
+#${ID.modal} .uwc-shortcuts{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:7px!important}
+#${ID.modal} .uwc-shortcuts span{display:flex!important;align-items:center!important;min-height:32px!important;padding:7px 9px!important;border:1px solid var(--uwc-ui-border)!important;border-radius:8px!important;background:var(--uwc-ui-bg-secondary)!important;font:11px/1.4 ui-monospace,monospace!important;color:var(--uwc-ui-muted)!important}
+#${ID.modal} .uwc-inline-actions{grid-column:1/-1!important;display:flex!important;flex-wrap:wrap!important;gap:8px!important;margin:6px 0 15px!important}
+#${ID.modal} .uwc-actions{position:sticky!important;bottom:0!important;z-index:5!important;grid-column:1/-1!important;display:flex!important;align-items:center!important;justify-content:flex-end!important;gap:8px!important;flex-wrap:wrap!important;margin:4px -28px 0!important;padding:14px 28px!important;border-top:1px solid var(--uwc-ui-border)!important;background:var(--uwc-ui-bg)!important}
+#${ID.modal} .uwc-actions::before{content:"Changes save automatically"!important;flex:1 1 auto!important;color:var(--uwc-ui-muted)!important;font-size:11px!important}
+@media(max-width:700px){#${ID.modal}{padding:10px!important}#${ID.modal} .uwc-panel{max-height:calc(100dvh - 20px)!important;border-radius:14px!important}#${ID.modal} .uwc-header{min-height:70px!important;padding:15px 18px!important}#${ID.modal} .uwc-body{display:block!important;padding:17px 18px 0!important}#${ID.modal} .uwc-status{margin-bottom:22px!important}#${ID.modal} .uwc-section[data-section="layout"]>.uwc-grid{grid-template-columns:1fr!important}#${ID.modal} .uwc-advanced-body{grid-template-columns:1fr!important}#${ID.modal} .uwc-actions{margin:4px -18px 0!important;padding:12px 18px!important}#${ID.modal} .uwc-actions::before{flex-basis:100%!important}}
+@media(max-width:440px){#${ID.modal} .uwc-title{font-size:18px!important}#${ID.modal} .uwc-version{font-size:10px!important}#${ID.modal} .uwc-status{align-items:flex-start!important;flex-direction:column!important}#${ID.modal} .uwc-overview,#${ID.modal} .uwc-health-breakdown{grid-template-columns:repeat(2,minmax(0,1fr))!important}#${ID.modal} .uwc-actions button{flex:1 1 calc(50% - 6px)!important}}
+@media(prefers-reduced-motion:reduce){#${ID.modal} *,#${ID.modal} *::before,#${ID.modal} *::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+
+/* Consumer settings – restrained native ChatGPT / Apple-like hierarchy */
+#${ID.modal}{--uwc-accent:var(--text-primary,#f4f4f4);--uwc-accent-strong:var(--text-primary,#fff);background:rgba(0,0,0,.52)!important;backdrop-filter:blur(9px)!important}
+#${ID.modal} .uwc-panel{width:min(560px,100%)!important;max-height:min(88dvh,820px)!important;border-radius:22px!important;box-shadow:0 30px 90px #0007!important;scrollbar-width:thin!important}
+#${ID.modal} .uwc-header{min-height:82px!important;padding:23px 28px 18px!important;border-bottom:0!important;position:relative!important}
+#${ID.modal} .uwc-title{font-size:22px!important;font-weight:650!important;letter-spacing:-.04em!important}
+#${ID.modal} .uwc-subtitle{font-size:13px!important;margin-top:6px!important}
+#${ID.modal} .uwc-version{display:none!important}
+#${ID.modal} .uwc-close{width:32px!important;min-width:32px!important;height:32px!important;border-radius:50%!important;background:var(--uwc-ui-bg-secondary)!important;font-size:21px!important}
+#${ID.modal} .uwc-body{display:block!important;padding:9px 28px 0!important}
+#${ID.modal} .uwc-status{margin:4px 0 24px!important;padding:14px 15px!important;border:0!important;border-radius:13px!important;background:var(--uwc-ui-bg-secondary)!important}
+#${ID.modal} .uwc-status strong{font-size:14px!important;font-weight:620!important}
+#${ID.modal} .uwc-status-detail{font-size:12px!important}
+#${ID.modal} .uwc-status-main::before{background:#19a879!important}
+#${ID.modal} .uwc-section{margin:0 0 21px!important}
+#${ID.modal} .uwc-section h3{font-size:12px!important;font-weight:600!important;color:var(--uwc-ui-muted)!important;border:0!important;margin:0 0 5px!important;padding:0 10px!important}
+#${ID.modal} .uwc-section[data-section="your-view"]>.uwc-grid{grid-template-columns:1fr!important;gap:0!important}
+#${ID.modal} .uwc-check{min-height:51px!important;padding:10px 11px!important;border-radius:11px!important;grid-template-columns:minmax(0,1fr) 43px!important}
+#${ID.modal} .uwc-check-copy{font-size:14px!important;font-weight:500!important;line-height:1.45!important}
+#${ID.modal} .uwc-toggle-state{width:40px!important;height:24px!important;border:0!important;background:var(--uwc-ui-bg-tertiary)!important}
+#${ID.modal} .uwc-toggle-state::after{width:18px!important;height:18px!important;left:3px!important;top:3px!important;background:#fff!important;box-shadow:0 1px 3px #0003!important}
+#${ID.modal} .uwc-check input:checked~.uwc-toggle-state{background:#16a879!important;border:0!important}
+#${ID.modal} .uwc-check input:checked~.uwc-toggle-state::after{transform:translateX(16px)!important}
+#${ID.modal} .uwc-check:hover{background:var(--uwc-ui-bg-secondary)!important}
+#${ID.modal} .uwc-field{min-height:66px!important;padding:10px 11px!important}
+#${ID.modal} .uwc-field>label{font-size:13px!important}
+#${ID.modal} .uwc-field select,#${ID.modal} .uwc-field input{border-radius:10px!important;min-height:39px!important}
+#${ID.modal} .uwc-advanced{margin:6px 0 14px!important;border-top:1px solid var(--uwc-ui-border)!important}
+#${ID.modal} .uwc-advanced>summary{font-size:14px!important;font-weight:540!important;min-height:52px!important;padding:13px 10px!important}
+#${ID.modal} .uwc-advanced-body{display:block!important;padding:7px 0 12px!important}
+#${ID.modal} .uwc-consumer-extras{margin-bottom:18px!important;padding:4px 0!important;border-radius:12px!important;background:var(--uwc-ui-bg-secondary)!important}
+#${ID.modal} .uwc-advanced-body>.uwc-section{margin:18px 0!important}
+#${ID.modal} .uwc-advanced-body .uwc-grid{display:grid!important;grid-template-columns:1fr!important;gap:2px!important}
+#${ID.modal} .uwc-health-pill{display:inline-flex!important;margin:4px 10px 17px!important;font-size:11px!important;font-family:ui-sans-serif,system-ui,sans-serif!important}
+#${ID.modal} .uwc-consumer-tools{display:flex!important;flex-wrap:wrap!important;gap:8px!important;padding:12px 6px 20px!important;border-top:1px solid var(--uwc-ui-border)!important}
+#${ID.modal} .uwc-consumer-tools button{font-size:12px!important}
+#${ID.modal} .uwc-overview,#${ID.modal} .uwc-health-breakdown{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+#${ID.modal} .uwc-actions{position:sticky!important;bottom:0!important;margin:4px -28px 0!important;padding:13px 28px 17px!important;background:var(--uwc-ui-bg)!important;border-top:1px solid var(--uwc-ui-border)!important;justify-content:flex-end!important}
+#${ID.modal} .uwc-actions::before{content:'Saved automatically'!important;font-size:12px!important}
+#${ID.modal} .uwc-actions .uwc-primary{min-width:86px!important;border-radius:999px!important;background:var(--uwc-ui-text)!important;border-color:var(--uwc-ui-text)!important;color:var(--uwc-ui-bg)!important;font-size:13px!important}
+#${ID.modal} .uwc-actions .uwc-primary:hover{opacity:.86!important}
+#${ID.modal} button:focus-visible,#${ID.modal} input:focus-visible,#${ID.modal} select:focus-visible,#${ID.modal} summary:focus-visible{outline:2px solid #16a879!important;outline-offset:3px!important}
+@media(max-width:620px){#${ID.modal}{padding:10px!important}#${ID.modal} .uwc-panel{max-height:calc(100dvh - 20px)!important;border-radius:18px!important}#${ID.modal} .uwc-header{padding:20px 20px 13px!important}#${ID.modal} .uwc-body{padding:8px 20px 0!important}#${ID.modal} .uwc-actions{margin:4px -20px 0!important;padding:12px 20px 15px!important}#${ID.modal} .uwc-actions::before{flex-basis:auto!important}#${ID.modal} .uwc-actions button{flex:0 0 auto!important}}
+@media(prefers-color-scheme:light){#${ID.modal}{--uwc-accent:#161616}}
+`.trim();
   }
-}
- 
-@media (max-width:700px){
-  #${ID.modal}{
-    align-items:stretch!important;
-    padding:8px!important;
-  }
- 
-  #${ID.modal} .uwc-panel{
-    max-height:100%!important;
-    border-radius:14px!important;
-  }
- 
-  #${ID.modal} .uwc-header{
-    padding:14px 15px!important;
-  }
- 
-  #${ID.modal} .uwc-body{
-    padding:13px 15px 0!important;
-  }
- 
-  #${ID.modal} .uwc-status{
-    align-items:flex-start!important;
-  }
- 
-  #${ID.modal} .uwc-grid{
-    grid-template-columns:1fr!important;
-  }
- 
-  #${ID.modal} .uwc-shortcuts{
-    grid-template-columns:repeat(2,minmax(0,1fr))!important;
-  }
- 
-  #${ID.modal} .uwc-actions{
-    margin:14px -15px 0!important;
-    padding:12px 15px!important;
-  }
- 
-  #${ID.modal} .uwc-actions::before{
-    flex-basis:100%!important;
-  }
-}
- 
-@media (max-width:520px){
-  #${ID.modal} .uwc-overview,
-  #${ID.modal} .uwc-health-breakdown{
-    grid-template-columns:repeat(2,minmax(0,1fr))!important;
-  }
- 
-  #${ID.modal} .uwc-status{
-    flex-direction:column!important;
-  }
- 
-  #${ID.modal} .uwc-health-pill{
-    align-self:flex-start!important;
-  }
- 
-  #${ID.modal} .uwc-shortcuts{
-    grid-template-columns:1fr!important;
-  }
- 
-  #${ID.modal} .uwc-actions button{
-    flex:1 1 calc(50% - 4px)!important;
-  }
-}
- 
-@media (prefers-reduced-motion:reduce){
-  #${ID.toast},
-  #${ID.modal},
-  #${ID.modal} *{
-    scroll-behavior:auto!important;
-    transition:none!important;
-    animation:none!important;
-  }
-}`.trim();
-  }
- 
+
   function getCssCacheKey() {
     return [
       VERSION,
@@ -3820,10 +3444,10 @@ ${safeMediaCss}
       settings.widenComposer
     ].join('|');
   }
- 
+
   function getMainCss() {
     const key = getCssCacheKey();
- 
+
     if (
       runtime.cssCacheKey !== key ||
       !runtime.mainCssCache
@@ -3831,33 +3455,33 @@ ${safeMediaCss}
       runtime.cssCacheKey = key;
       runtime.mainCssCache = buildMainCss();
     }
- 
+
     return runtime.mainCssCache;
   }
- 
+
   function getUiCss() {
     if (!runtime.uiCssCache) {
       runtime.uiCssCache = buildUiCss();
     }
- 
+
     return runtime.uiCssCache;
   }
- 
+
   function invalidateCssCache() {
     runtime.cssCacheKey = '';
     runtime.mainCssCache = '';
   }
- 
+
   function ensureStyle(id, content) {
     const head = getHead();
- 
+
     if (!head) {
       return false;
     }
- 
+
     let changed = false;
     let style = document.getElementById(id);
- 
+
     if (
       style &&
       (
@@ -3870,12 +3494,12 @@ ${safeMediaCss}
       style = null;
       changed = true;
     }
- 
+
     try {
       const duplicates = Array.from(
         document.querySelectorAll(`[id="${id}"]`)
       );
- 
+
       for (const duplicate of duplicates) {
         if (duplicate !== style) {
           if (duplicate.parentNode) markMutationIntent(duplicate.parentNode, 'childList');
@@ -3884,7 +3508,7 @@ ${safeMediaCss}
         }
       }
     } catch (_) {}
- 
+
     if (!style) {
       style = document.createElement('style');
       style.id = id;
@@ -3893,7 +3517,7 @@ ${safeMediaCss}
       head.appendChild(style);
       changed = true;
     }
- 
+
     if (
       style.getAttribute('data-version') !== VERSION
     ) {
@@ -3901,72 +3525,72 @@ ${safeMediaCss}
       style.setAttribute('data-version', VERSION);
       changed = true;
     }
- 
+
     if (style.textContent !== content) {
       markMutationIntent(style, 'childList');
       style.textContent = content;
       changed = true;
     }
- 
+
     return changed;
   }
- 
+
   function removeMainStyle() {
     return removeById(ID.style);
   }
- 
+
   function removeUiStyle() {
     return removeById(ID.uiStyle);
   }
- 
+
   function setRootState() {
     const root = getRoot();
- 
+
     if (!root) {
       return;
     }
- 
+
     if (!settings.enabled) {
       clearRootState();
       return;
     }
- 
+
     const pane = resolveActivePane();
     const paneRect = getVisibleRect(pane);
     if (paneRect) syncSizedPane(pane, paneRect.width);
- 
+
     setAttributeValue(
       root,
       ATTR.version,
       VERSION
     );
- 
+
     setAttributeValue(
       root,
       ATTR.cap,
       settings.cap
     );
- 
+
     setBooleanAttribute(
       root,
       ATTR.enabled,
       settings.enabled
     );
- 
+
     setBooleanAttribute(
       root,
       ATTR.wide,
       isWideActive() &&
         !runtime.safeFallbackActive
     );
- 
+
     setBooleanAttribute(
       root,
       ATTR.left,
       settings.enabled &&
         settings.left
     );
- 
+
     setBooleanAttribute(
       root,
       ATTR.canvas,
@@ -3976,14 +3600,14 @@ ${safeMediaCss}
     );
     scheduleClipAlignment();
   }
- 
+
   function rootStateMatches() {
     const root = getRoot();
- 
+
     if (!root) {
       return false;
     }
- 
+
     if (!settings.enabled) {
       return ![
         ATTR.version,
@@ -3994,10 +3618,10 @@ ${safeMediaCss}
         ATTR.canvas
       ].some((attribute) => root.hasAttribute(attribute));
     }
- 
+
     const expectedBoolean = (enabled) =>
       enabled ? '1' : null;
- 
+
     return (
       root.getAttribute(ATTR.version) === VERSION &&
       root.getAttribute(ATTR.cap) === settings.cap &&
@@ -4022,7 +3646,7 @@ ${safeMediaCss}
         )
     );
   }
- 
+
   function clearRootState() {
     clearClipAlignment();
     clearSizedPane();
@@ -4030,7 +3654,7 @@ ${safeMediaCss}
     if (!root) {
       return false;
     }
- 
+
     let changed = false;
     for (const attribute of [
       ATTR.enabled,
@@ -4044,7 +3668,7 @@ ${safeMediaCss}
     }
     return changed;
   }
- 
+
   function createDesiredMarkers() {
     return new Map(
       MANAGED_MARKERS.map((attribute) => [
@@ -4053,7 +3677,7 @@ ${safeMediaCss}
       ])
     );
   }
- 
+
   function addDesiredMarker(
     desired,
     attribute,
@@ -4062,20 +3686,20 @@ ${safeMediaCss}
     if (!isConnectedElement(element)) {
       return;
     }
- 
+
     desired.get(attribute)?.add(element);
   }
- 
+
   function applyMarkerDiff(desired) {
     for (const attribute of MANAGED_MARKERS) {
       const previous =
         runtime.marked.get(attribute) ||
         new Set();
- 
+
       const next =
         desired.get(attribute) ||
         new Set();
- 
+
       for (const element of previous) {
         if (
           !element.isConnected ||
@@ -4084,44 +3708,45 @@ ${safeMediaCss}
           setBooleanAttribute(element, attribute, false);
         }
       }
- 
+
       for (const element of next) {
         if (!previous.has(element) || element.getAttribute(attribute) !== '1') {
           setBooleanAttribute(element, attribute, true);
         }
       }
- 
+
       runtime.marked.set(
         attribute,
         next
       );
     }
   }
- 
+
   function clearManagedMarkers() {
+    clearComposerScrollGuard();
     for (const attribute of MANAGED_MARKERS) {
       const elements =
         runtime.marked.get(attribute) ||
         new Set();
- 
+
       for (const element of elements) {
         if (element?.removeAttribute) {
           setBooleanAttribute(element, attribute, false);
         }
       }
- 
+
       runtime.marked.set(
         attribute,
         new Set()
       );
     }
   }
- 
+
   function nearestMain(element) {
     if (!isConnectedElement(element)) {
       return null;
     }
- 
+
     try {
       return element.closest(
         SELECTOR.main
@@ -4130,7 +3755,7 @@ ${safeMediaCss}
       return null;
     }
   }
- 
+
   function commonAncestor(
     elements,
     boundary
@@ -4139,13 +3764,13 @@ ${safeMediaCss}
       elements.filter(
         isConnectedElement
       );
- 
+
     if (valid.length === 0) {
       return null;
     }
- 
+
     let candidate = valid[0];
- 
+
     while (
       candidate &&
       candidate !== boundary &&
@@ -4156,7 +3781,7 @@ ${safeMediaCss}
       candidate =
         candidate.parentElement;
     }
- 
+
     if (
       candidate &&
       valid.every((element) =>
@@ -4165,10 +3790,10 @@ ${safeMediaCss}
     ) {
       return candidate;
     }
- 
+
     return boundary || null;
   }
- 
+
   function addPath(
     desired,
     start,
@@ -4178,7 +3803,7 @@ ${safeMediaCss}
   ) {
     let current = start;
     let depth = 0;
- 
+
     while (
       current &&
       current !== stopExclusive &&
@@ -4189,21 +3814,21 @@ ${safeMediaCss}
         attribute,
         current
       );
- 
+
       current =
         current.parentElement;
- 
+
       depth += 1;
     }
   }
- 
+
   function compactOutermostElements(elements, selector) {
     const unique = Array.from(
       new Set(
         elements.filter(isConnectedElement)
       )
     );
- 
+
     return unique.filter((element) => {
       try {
         return !element.parentElement?.closest(selector);
@@ -4212,61 +3837,62 @@ ${safeMediaCss}
       }
     });
   }
- 
-  function queryConversationTurns() {
+
+  function queryConversationTurns(pane) {
     let preferred = [];
- 
+
     try {
       preferred = Array.from(
-        document.querySelectorAll(
+        pane.querySelectorAll(
           SELECTOR.preferredTurns
         )
-      ).filter(isConnectedElement);
+      ).filter((turn) => !turn.closest(SELECTOR.excludedComposerAncestor));
     } catch (_) {}
- 
+
     runtime.lastRawTurnCount =
       preferred.length;
- 
+
     if (preferred.length > 0) {
       return compactOutermostElements(
         preferred,
         SELECTOR.preferredTurns
       );
     }
- 
+
     let fallbackMessages = [];
- 
+
     try {
       fallbackMessages = Array.from(
-        document.querySelectorAll(
+        pane.querySelectorAll(
           SELECTOR.fallbackMessages
         )
       ).filter(isConnectedElement);
     } catch (_) {}
- 
+
     runtime.lastRawTurnCount =
       fallbackMessages.length;
- 
+
     const fallbackTurns =
       fallbackMessages
+        .filter((message) => !message.closest(SELECTOR.excludedComposerAncestor))
         .map((message) => {
-          return (
-            message.closest('article') ||
-            message.parentElement
-          );
+          const article = message.closest('article');
+          return article !== pane && pane.contains(article)
+            ? article
+            : message.parentElement === pane ? message : message.parentElement;
         })
         .filter(isConnectedElement);
- 
+
     return Array.from(
       new Set(fallbackTurns)
     );
   }
- 
+
   function findTurnContentAnchor(turn) {
     if (!isConnectedElement(turn)) {
       return null;
     }
- 
+
     try {
       return (
         turn.querySelector(
@@ -4282,103 +3908,63 @@ ${safeMediaCss}
       );
     }
   }
- 
-  function markConversation(desired) {
-    const turns =
-      queryConversationTurns();
- 
-    runtime.lastTurnCount =
-      turns.length;
- 
+
+  function markConversation(desired, main) {
+    const turns = main ? queryConversationTurns(main) : [];
+    runtime.lastTurnCount = turns.length;
+
     if (turns.length === 0) {
       return;
     }
- 
-    const mainCounts =
-      new Map();
- 
-    for (const turn of turns) {
-      const main =
-        nearestMain(turn);
- 
-      if (!main) {
-        continue;
-      }
- 
-      mainCounts.set(
-        main,
-        (mainCounts.get(main) || 0) + 1
-      );
-    }
- 
-    const main =
-      Array.from(
-        mainCounts.entries()
-      ).sort(
-        (a, b) => b[1] - a[1]
-      )[0]?.[0];
- 
-    if (!main) {
-      return;
-    }
- 
-    const mainTurns =
-      turns.filter((turn) =>
-        main.contains(turn)
-      );
- 
-    if (mainTurns.length === 0) {
-      return;
-    }
- 
+
     let conversationRoot =
       commonAncestor(
-        mainTurns,
+        turns,
         main
       ) || main;
- 
+
     if (
-      mainTurns.length === 1 &&
-      conversationRoot === mainTurns[0]
+      turns.length === 1 &&
+      conversationRoot === turns[0]
     ) {
       let current =
         conversationRoot.parentElement;
- 
+
       let hops = 0;
- 
+
       while (
         current &&
         current !== main &&
         hops < 4
       ) {
         conversationRoot = current;
- 
+
         if (
           current.children.length > 1
         ) {
           break;
         }
- 
+
         current =
           current.parentElement;
- 
+
         hops += 1;
       }
     }
- 
+
     addDesiredMarker(
       desired,
       ATTR.conversationRoot,
       conversationRoot
     );
- 
-    for (const turn of mainTurns) {
+
+    for (const turn of turns) {
       addDesiredMarker(
         desired,
         ATTR.turn,
         turn
       );
- 
+
       addPath(
         desired,
         turn.parentElement,
@@ -4386,10 +3972,10 @@ ${safeMediaCss}
         ATTR.conversationPath,
         CONFIG.maxConversationPathDepth
       );
- 
+
       const anchor =
         findTurnContentAnchor(turn);
- 
+
       if (
         anchor &&
         anchor !== turn
@@ -4402,12 +3988,12 @@ ${safeMediaCss}
           CONFIG.maxTurnPathDepth
         );
       }
- 
+
       let direct =
         turn.firstElementChild;
- 
+
       let directDepth = 0;
- 
+
       while (
         direct &&
         directDepth < 3 &&
@@ -4418,83 +4004,75 @@ ${safeMediaCss}
           ATTR.turnPath,
           direct
         );
- 
+
         direct =
           direct.firstElementChild;
- 
+
         directDepth += 1;
       }
     }
   }
- 
-  function findComposerInput() {
+
+  function findComposerInput(pane) {
+    if (!pane) return null;
     let candidates = [];
- 
+
     try {
       const recent = Array.from(
-        document.querySelectorAll(
+        pane.querySelectorAll(
           SELECTOR.composerInput
         )
       ).slice(-CONFIG.maxComposerCandidates);
- 
+
       // A large number of unrelated forms must not push the real composer
       // out of the bounded candidate set before its priority is evaluated.
-      const primary = Array.from(document.querySelectorAll(
-        '#prompt-textarea,[data-testid="prompt-textarea"],[data-testid="composer-input"],[data-testid="composer:input"]'
+      const primary = Array.from(pane.querySelectorAll(
+        PRIMARY_COMPOSER_INPUT
       ));
       candidates = Array.from(new Set([...primary, ...recent]))
         .filter(isConnectedElement);
     } catch (_) {}
- 
+
     if (candidates.length === 0) {
       return null;
     }
- 
+
     const isExcluded = (element) => {
       try {
         return Boolean(
           element.closest(
-            SELECTOR.excludedComposerAncestor
+            `${SELECTOR.excludedComposerAncestor},${SELECTOR.preferredTurns},${SELECTOR.fallbackMessages}`
           )
         );
       } catch (_) {
         return false;
       }
     };
- 
+
     const focused =
       document.activeElement;
- 
-    if (
-      isElement(focused) &&
-      candidates.includes(focused) &&
-      !isExcluded(focused) &&
-      isVisibleElement(focused)
-    ) {
-      return focused;
-    }
- 
+
     const scored = candidates
       .filter((element) =>
         !isExcluded(element) &&
         isVisibleElement(element)
       )
       .map((element, index) => {
-        let score = index;
- 
+        let score = index + (element === focused ? 100 : 0);
+
         try {
           if (element.id === 'prompt-textarea') {
             score += 1600;
           }
- 
+
           if (
             element.matches(
-              '[data-testid="prompt-textarea"],[data-testid="composer-input"],[data-testid="composer:input"]'
+              COMPOSER_INPUT_TEST_IDS
             )
           ) {
             score += 1200;
           }
- 
+
           if (
             element.closest(
               '#thread-bottom-container'
@@ -4502,7 +4080,7 @@ ${safeMediaCss}
           ) {
             score += 800;
           }
- 
+
           if (
             element.closest(
               'form[data-type="unified-composer"]'
@@ -4510,10 +4088,10 @@ ${safeMediaCss}
           ) {
             score += 500;
           }
- 
+
           const rect =
             element.getBoundingClientRect();
- 
+
           score += Math.max(
             0,
             Math.min(
@@ -4522,7 +4100,7 @@ ${safeMediaCss}
             )
           ) / 10;
         } catch (_) {}
- 
+
         return {
           element,
           score
@@ -4531,61 +4109,749 @@ ${safeMediaCss}
       .sort((a, b) =>
         b.score - a.score
       );
- 
+
     return scored[0]?.element || null;
   }
- 
-  function markComposer(desired) {
+
+  const COMPOSER_SCROLL_GUARD_ATTR = 'data-uwc-composer-scroll-guard';
+  const COMPOSER_VISUAL_SCROLLBAR_ATTR = 'data-uwc-composer-visual-scrollbar';
+  const COMPOSER_MENTION_SCROLL_SCOPE_ATTR = 'data-uwc-composer-mention-scroll-scope';
+  const COMPOSER_DEBUG_REQUEST = 'uwc:composer-debug';
+  const COMPOSER_DEBUG_ATTR = 'data-uwc-composer-debug';
+
+  const MENTION_POPUP_MARKER = 'data-uwc-mention-popup-repaired';
+  const MENTION_CLIP_RELEASE_ATTR = 'data-uwc-mention-clip-release';
+  const MENTION_POPUP_SELECTOR =
+    '.composer-home-top-menu:has([data-mention-list-scroll-area])';
+  const MENTION_POPUP_STYLE_KEYS = Object.freeze([
+    '--uwc-mention-popup-left', '--uwc-mention-popup-bottom',
+    '--uwc-mention-popup-width', '--uwc-mention-popup-height'
+  ]);
+
+  function clearMentionPopupRepair() {
+    const menu = runtime.mentionPopupNode;
+    if (menu) {
+      for (const [name, prior] of runtime.mentionPopupOriginalStyle) {
+        const current = menu.style.getPropertyValue(name);
+        // Do not overwrite changes made by ChatGPT or another extension.
+        if (current !== prior.applied) continue;
+        markMutationIntent(menu, 'attributes', 'style');
+        if (prior.value) menu.style.setProperty(name, prior.value, prior.priority);
+        else menu.style.removeProperty(name);
+      }
+      if (menu.hasAttribute(MENTION_POPUP_MARKER)) {
+        setBooleanAttribute(menu, MENTION_POPUP_MARKER, false);
+      }
+    }
+    runtime.mentionPopupNode = null;
+    runtime.mentionPopupOriginalStyle.clear();
+    for (const node of runtime.mentionPopupClipNodes) {
+      if (node.hasAttribute?.(MENTION_CLIP_RELEASE_ATTR)) {
+        setBooleanAttribute(node, MENTION_CLIP_RELEASE_ATTR, false);
+      }
+    }
+    runtime.mentionPopupClipNodes.clear();
+  }
+
+  function storeMentionPopupVar(menu, name, value) {
+    const next = String(value);
+    const previous = runtime.mentionPopupOriginalStyle.get(name);
+    if (!previous) {
+      runtime.mentionPopupOriginalStyle.set(name, {
+        value: menu.style.getPropertyValue(name),
+        priority: menu.style.getPropertyPriority(name),
+        applied: next
+      });
+    } else {
+      previous.applied = next;
+    }
+    if (menu.style.getPropertyValue(name) !== next) {
+      markMutationIntent(menu, 'attributes', 'style');
+      menu.style.setProperty(name, next);
+    }
+  }
+
+  function inspectMentionPopup(input, mentionActive) {
+    const composer = input && (input.closest('form') ||
+      input.closest(SELECTOR.composerShell) || input);
+    const composerRect = composer?.getBoundingClientRect();
+    // A page can contain multiple suggestion menus (split panes, hidden
+    // dialogs, or stale portals). Never use the first matching DOM node.
+    // Score only menus that overlap the active composer horizontally.
+    const matchedMenus = [];
+    if (input && mentionActive && composerRect?.width > 0) {
+      for (const element of document.querySelectorAll(MENTION_POPUP_SELECTOR)) {
+        const box = element.getBoundingClientRect();
+        const css = getComputedStyle(element);
+        if (!box.width || css.display === 'none' ||
+            css.visibility === 'hidden' || css.visibility === 'collapse') continue;
+        const overlap = Math.max(0, Math.min(box.right, composerRect.right) -
+          Math.max(box.left, composerRect.left));
+        if (overlap < Math.min(box.width, composerRect.width) * 0.28) continue;
+        // A fully collapsed panel is still recoverable when its items exist.
+        if (!box.height && element.querySelectorAll('[data-list-navigation-item]').length < 2) continue;
+        const distance = Math.abs(box.bottom - composerRect.top);
+        if (distance > Math.max(innerHeight, 850)) continue;
+        matchedMenus.push({ element, distance,
+          owned: composer.contains(element) ? 1 : 0 });
+      }
+    }
+    // Prefer a menu owned by this composer's DOM when both are plausible.
+    // A nearby unrelated portal must not steal a valid owned suggestion list.
+    matchedMenus.sort((a, b) => b.owned - a.owned || a.distance - b.distance);
+    const menu = matchedMenus[0]?.element || null;
+    const result = {
+      present: Boolean(menu), active: Boolean(mentionActive),
+      candidates: matchedMenus.length,
+      repaired: Boolean(menu?.hasAttribute(MENTION_POPUP_MARKER)),
+      reason: '', menu: null, composer: null, clippedBy: []
+    };
+    if (!menu || !composerRect) return { menu, result, shouldFix: false };
+    const menuRect = menu.getBoundingClientRect();
+    result.menu = { left: menuRect.left, top: menuRect.top,
+      bottom: menuRect.bottom, width: menuRect.width, height: menuRect.height };
+    result.composer = { left: composerRect.left, top: composerRect.top,
+      bottom: composerRect.bottom, width: composerRect.width };
+    if (composerRect.width < 100 || composerRect.top < 80 ||
+        innerWidth < 240 || innerHeight < 160) {
+      result.reason = 'insufficient-viewport-space';
+      return { menu, result, shouldFix: false };
+    }
+    // Detect ancestor clipping instead of mistaking a clipped menu's rounded
+    // bottom border for a native scrollbar. Exclude the menu itself, whose
+    // overflow-hidden is intentional for its rounded corners.
+    let top = Math.max(0, menuRect.top);
+    let bottom = Math.min(innerHeight, menuRect.bottom);
+    for (let node = menu.parentElement, depth = 0;
+      node && node !== document.documentElement && depth < 20;
+      node = node.parentElement, depth += 1) {
+      const css = getComputedStyle(node);
+      if (/(hidden|clip|scroll|auto)/.test(css.overflowY)) {
+        const clip = node.getBoundingClientRect();
+        top = Math.max(top, clip.top);
+        bottom = Math.min(bottom, clip.bottom);
+        result.clippedBy.push({ tag: node.tagName.toLowerCase(),
+          id: node.id || '', height: Math.round(clip.height),
+          overflowY: css.overflowY });
+      }
+    }
+    const visibleHeight = Math.max(0, bottom - top);
+    result.menu.visibleHeight = Math.round(visibleHeight);
+    const misplaced = menuRect.top >= composerRect.top - 8 ||
+      menuRect.bottom > composerRect.top + 12;
+    const clipped = menuRect.height > 100 &&
+      visibleHeight < Math.min(100, menuRect.height * 0.45);
+    const collapsed = menuRect.height < 36 &&
+      menu.querySelectorAll('[data-list-navigation-item]').length > 2;
+    const shouldFix = misplaced || clipped || collapsed ||
+      (runtime.mentionPopupNode === menu && menu.hasAttribute(MENTION_POPUP_MARKER));
+    result.reason = misplaced ? 'popup-below-or-overlapping-composer'
+      : clipped ? 'popup-clipped-by-ancestor-or-viewport'
+      : collapsed ? 'popup-collapsed-to-thin-strip' : 'native-menu-is-visible';
+    return { menu, result, shouldFix };
+  }
+
+  function auditMentionPopup(input, mentionActive) {
+    if (!runtime.started || !settings.enabled || !isWideActive() ||
+        runtime.safeFallbackActive) {
+      clearMentionPopupRepair();
+      runtime.mentionPopupLastAudit = { reason: 'inactive' };
+      return;
+    }
+    const { menu, result, shouldFix } = inspectMentionPopup(input, mentionActive);
+    if (runtime.mentionPopupNode && runtime.mentionPopupNode !== menu) {
+      clearMentionPopupRepair();
+    }
+    if (!shouldFix || !menu) {
+      if (runtime.mentionPopupNode) clearMentionPopupRepair();
+      runtime.mentionPopupLastAudit = result;
+      return;
+    }
+    const rect = result.composer;
+    const margin = 8;
+    const availableHeight = Math.max(72, Math.floor(rect.top - margin * 2));
+    const configuredHeight = parseFloat(getComputedStyle(menu)
+      .getPropertyValue('--composer-top-menu-max-height')) || 687;
+    const maxHeight = Math.min(availableHeight, Math.max(120, configuredHeight));
+    const width = Math.min(rect.width, innerWidth - margin * 2);
+    const targetLeft = Math.max(margin, Math.min(rect.left, innerWidth - margin - width));
+    // A transformed composer creates the containing block for fixed children.
+    // Convert viewport geometry into that containing block's local CSS units.
+    // This prevents the popup shifting sideways on centered Work composers.
+    let fixedRoot = null;
+    for (let node = menu.parentElement; node && node !== document.documentElement;
+      node = node.parentElement) {
+      const css = getComputedStyle(node);
+      if (css.transform !== 'none' || css.translate !== 'none' ||
+          css.perspective !== 'none' || css.filter !== 'none' ||
+          /layout|paint|strict|content/.test(css.contain) ||
+          /transform/.test(css.willChange)) {
+        fixedRoot = node;
+        break;
+      }
+    }
+    let left = targetLeft;
+    let bottom = Math.max(margin, innerHeight - rect.top + margin);
+    let localWidth = width;
+    let localMaxHeight = maxHeight;
+    if (fixedRoot) {
+      const bounds = fixedRoot.getBoundingClientRect();
+      const sx = bounds.width / (fixedRoot.offsetWidth || bounds.width || 1);
+      const sy = bounds.height / (fixedRoot.offsetHeight || bounds.height || 1);
+      if (sx > 0 && sy > 0 && Number.isFinite(sx) && Number.isFinite(sy)) {
+        left = (targetLeft - bounds.left) / sx;
+        bottom = (bounds.bottom - (rect.top - margin)) / sy;
+        localWidth = width / sx;
+        localMaxHeight = maxHeight / sy;
+      }
+    }
+    if (runtime.mentionPopupNode !== menu) {
+      runtime.mentionPopupNode = menu;
+      runtime.mentionPopupOriginalStyle.clear();
+    }
+    // Release only hidden/clip ancestors that would otherwise mask the popup;
+    // leave normal scrollports, popovers and the transcript untouched.
+    const nextClipNodes = new Set();
+    for (let node = menu.parentElement, depth = 0;
+      node && node !== document.documentElement && depth < 12;
+      node = node.parentElement, depth += 1) {
+      if (node.matches('main,[role="main"],body,.thread-scroll-container,'+
+          '[data-thread-user-message-navigation-content]')) break;
+      const style = getComputedStyle(node);
+      if ((style.overflowY === 'hidden' || style.overflowY === 'clip' ||
+           style.overflowX === 'hidden' || style.overflowX === 'clip')) {
+        const bounds = node.getBoundingClientRect();
+        // Only release ancestors whose clip region would actually mask the
+        // intended popup. Other hidden/clip containers keep their semantics.
+        const targetTop = rect.top - margin - maxHeight;
+        const targetBottom = rect.top - margin;
+        const obstructs = bounds.height > 0 && (
+          bounds.top > targetTop + 2 || bounds.bottom < targetBottom - 2 ||
+          bounds.left > targetLeft + 2 || bounds.right < targetLeft + width - 2
+        );
+        if (obstructs) nextClipNodes.add(node);
+      }
+    }
+    for (const oldNode of runtime.mentionPopupClipNodes) {
+      if (!nextClipNodes.has(oldNode)) {
+        setBooleanAttribute(oldNode, MENTION_CLIP_RELEASE_ATTR, false);
+      }
+    }
+    for (const node of nextClipNodes) {
+      setBooleanAttribute(node, MENTION_CLIP_RELEASE_ATTR, true);
+    }
+    runtime.mentionPopupClipNodes = nextClipNodes;
+
+    const values = [left, bottom, localWidth, localMaxHeight];
+    MENTION_POPUP_STYLE_KEYS.forEach((name, index) => {
+      storeMentionPopupVar(menu, name, `${Math.round(values[index])}px`);
+    });
+    setBooleanAttribute(menu, MENTION_POPUP_MARKER, true);
+    result.repaired = true;
+    result.placement = { left: Math.round(left), bottom: Math.round(bottom),
+      width: Math.round(width), maxHeight: Math.round(maxHeight),
+      fixedContainingBlock: fixedRoot?.id || fixedRoot?.tagName || 'viewport',
+      clipReleases: nextClipNodes.size };
+    runtime.mentionPopupLastAudit = result;
+  }
+
+
+  function clearComposerScrollGuard() {
+    clearMentionPopupRepair();
+    if (runtime.composerScrollGuardFrame) {
+      cancelNextFrame(runtime.composerScrollGuardFrame);
+      runtime.composerScrollGuardFrame = 0;
+    }
+    if (runtime.composerScrollGuardTimer) {
+      clearTimeout(runtime.composerScrollGuardTimer);
+      runtime.composerScrollGuardTimer = 0;
+    }
+    if (runtime.composerScrollGuardLateTimer) {
+      clearTimeout(runtime.composerScrollGuardLateTimer);
+      runtime.composerScrollGuardLateTimer = 0;
+    }
+    for (const element of runtime.composerScrollGuardNodes) {
+      if (element?.hasAttribute?.(COMPOSER_SCROLL_GUARD_ATTR)) {
+        setBooleanAttribute(element, COMPOSER_SCROLL_GUARD_ATTR, false);
+      }
+    }
+    runtime.composerScrollGuardNodes.clear();
+    for (const element of runtime.composerVisualScrollbarNodes) {
+      if (element?.hasAttribute?.(COMPOSER_VISUAL_SCROLLBAR_ATTR)) {
+        setBooleanAttribute(element, COMPOSER_VISUAL_SCROLLBAR_ATTR, false);
+      }
+    }
+    runtime.composerVisualScrollbarNodes.clear();
+    for (const element of runtime.composerMentionScrollbarScopeNodes) {
+      if (element?.hasAttribute?.(COMPOSER_MENTION_SCROLL_SCOPE_ATTR)) {
+        setBooleanAttribute(element, COMPOSER_MENTION_SCROLL_SCOPE_ATTR, false);
+      }
+    }
+    runtime.composerMentionScrollbarScopeNodes.clear();
+    getRoot()?.removeAttribute(COMPOSER_DEBUG_ATTR);
+    runtime.composerScrollGuardInitialOverflow = new WeakMap();
+    runtime.composerScrollGuardLastAudit = null;
+  }
+
+  // The inline composer may be a compact Work surface while the transcript
+  // uses the full pane. Limit all candidates to the actual composer geometry.
+  function getComposerScrollCandidates() {
+    const pane = runtime.observedPane?.isConnected
+      ? runtime.observedPane : resolveActivePane();
+    const input = findComposerInput(pane);
+    if (!input || !pane?.contains(input)) {
+      return { candidates: [], visualCandidates: [], input: null, mentionActive: false };
+    }
+
+    const form = input.closest('form');
+    const shell = form || input.closest(SELECTOR.composerShell) || input.parentElement;
+    const shellRect = getVisibleRect(shell);
+    const inputRect = getVisibleRect(input);
+    if (!shellRect || shellRect.width < 100 || !inputRect) {
+      return { candidates: [], visualCandidates: [], input, mentionActive: false };
+    }
+
+    const inputValue = String(input.value ?? input.textContent ?? '').slice(-256);
+    const mentionActive = /(?:^|\s)@[^\s]{0,64}$/u.test(inputValue);
+    const candidates = new Set();
+    let node = input.parentElement;
+    for (let depth = 0; node && node !== pane && depth < 18;
+      depth += 1, node = node.parentElement) {
+      candidates.add(node);
+      const rect = getVisibleRect(node);
+      // Large Work panes and document scroll containers are not composer hosts.
+      if (depth > 4 && rect &&
+          (rect.width > shellRect.width + 180 ||
+           rect.height > Math.max(420, shellRect.height + 240))) break;
+    }
+
+    const shells = [shell, input.closest('#thread-bottom-container')].filter(Boolean);
+    let outer = shell.parentElement;
+    for (let depth = 0; outer && outer !== pane && depth < 3;
+      depth += 1, outer = outer.parentElement) {
+      const rect = getVisibleRect(outer);
+      if (!rect || rect.width > shellRect.width + 110 ||
+          rect.height > Math.max(420, shellRect.height + 230)) break;
+      shells.push(outer);
+    }
+
+    // Look at nearby descendants and siblings. A visual bar may have no role,
+    // scrollbar attribute, or overflow class and may live next to <form>.
+    const visualNodes = new Set(runtime.composerVisualScrollbarNodes);
+    let budget = 260;
+    for (const root of shells) {
+      if (!budget) break;
+      for (const element of root.querySelectorAll('*')) {
+        if (!budget--) break;
+        if (element.matches(
+          '[class*="overflow-"],[style*="overflow"],'+
+          '[data-orientation="horizontal"],[role="scrollbar"],'+
+          '[data-radix-scroll-area-viewport]'
+        )) candidates.add(element);
+        if (mentionActive) visualNodes.add(element);
+      }
+      if (mentionActive) {
+        for (const sibling of root.parentElement?.children || []) {
+          if (sibling !== root) visualNodes.add(sibling);
+        }
+      }
+    }
+
+    // Hit-test the actual pixels immediately below the composer. The native
+    // ChatGPT structure can place a bar in a portal outside all nearby roots.
+    // Only a thin, horizontally aligned, non-interactive surface qualifies.
+    const probe = [];
+    if (mentionActive && typeof document.elementsFromPoint === 'function') {
+      const sampled = new Set();
+      for (const xFraction of [0.16, 0.5, 0.84]) {
+        const x = shellRect.left + shellRect.width * xFraction;
+        for (const offset of [5, 10, 15, 20]) {
+          const y = shellRect.bottom + offset;
+          if (x < 0 || y < 0 || x >= innerWidth || y >= innerHeight) continue;
+          for (const hit of document.elementsFromPoint(x, y).slice(0, 7)) {
+            if (!isElement(hit) || sampled.has(hit)) continue;
+            sampled.add(hit);
+            const r = getVisibleRect(hit);
+            if (!r || r.width < shellRect.width * 0.72 ||
+                r.width > shellRect.width + 60 || r.height < 3 || r.height > 24 ||
+                r.top < shellRect.bottom - 5 || r.top > shellRect.bottom + 24 ||
+                Math.abs(r.left - shellRect.left) > 36 ||
+                hit === input || hit.contains(input) ||
+                hit.closest('[role="dialog"],[aria-modal="true"],'+
+                  '[role="listbox"],[role="menu"],.monaco-editor,.cm-editor') ||
+                hit.matches('button,input,textarea,[contenteditable],a,'+
+                  '[role="button"],[role="textbox"],[role="option"]') ||
+                hit.querySelector('button,input,textarea,[contenteditable],a,'+
+                  '[role="button"],[role="textbox"],[role="option"],'+
+                  '[role="listbox"],[role="menu"]') ||
+                String(hit.textContent || '').trim()) continue;
+            const style = getComputedStyle(hit);
+            if (['auto','scroll','overlay'].includes(style.overflowX) &&
+                hit.scrollWidth > hit.clientWidth) continue;
+            if (style.position === 'fixed' || style.visibility === 'hidden') continue;
+            visualNodes.add(hit);
+            probe.push({ tag: hit.tagName.toLowerCase(), id: hit.id || '',
+              className: typeof hit.className === 'string'
+                ? hit.className.slice(0, 70) : '',
+              width: Math.round(r.width), height: Math.round(r.height),
+              reason: 'under-composer-hit-test' });
+          }
+        }
+      }
+    }
+
+    const list = [];
+    const widthMin = shellRect.width * 0.58;
+    const widthMax = shellRect.width + 100;
+    const center = shellRect.left + shellRect.width / 2;
+    const maxHeight = Math.max(420, shellRect.height + 230);
+    for (const element of candidates) {
+      if (!isConnectedElement(element) || element === input ||
+          element.matches('textarea,[contenteditable="true"],[role="textbox"]') ||
+          element.closest('[role="dialog"],[aria-modal="true"],'+
+            '[role="listbox"],[role="menu"],.monaco-editor,.cm-editor')) continue;
+      const rect = getVisibleRect(element);
+      const retainedWidget = runtime.composerScrollGuardNodes.has(element) &&
+        element.matches('[data-orientation="horizontal"],'+
+          '[role="scrollbar"][aria-orientation="horizontal"]');
+      if (retainedWidget && !rect) {
+        list.push({ element, shouldGuard: true, previous: true,
+          scrollbarWidget: true, overflowX: 'visible', widthExcess: 0,
+          width: 0, height: 0 });
+        continue;
+      }
+      if (!rect || rect.width < widthMin || rect.width > widthMax ||
+          rect.height > maxHeight || rect.height < 8 ||
+          Math.abs((rect.left + rect.width / 2) - center) > 95 ||
+          rect.bottom < shellRect.top - 70 ||
+          rect.top > shellRect.bottom + 60) continue;
+      const style = getComputedStyle(element);
+      const scrollbarWidget = (
+        element.matches('[data-orientation="horizontal"],'+
+          '[role="scrollbar"][aria-orientation="horizontal"]') &&
+        rect.height <= 26 && rect.top >= shellRect.bottom - 16
+      );
+      const widthExcess = element.scrollWidth - element.clientWidth;
+      const canScrollX = ['auto','scroll','overlay'].includes(style.overflowX);
+      const previous = runtime.composerScrollGuardNodes.has(element);
+      const originalX = previous
+        ? runtime.composerScrollGuardInitialOverflow.get(element)
+        : style.overflowX;
+      const shouldGuard = scrollbarWidget ||
+        (element.contains(input) && (canScrollX || previous) &&
+         (widthExcess >= 1 || originalX === 'scroll'));
+      list.push({ element, shouldGuard, previous, scrollbarWidget,
+        overflowX: style.overflowX, widthExcess,
+        width: Math.round(rect.width), height: Math.round(rect.height) });
+    }
+
+    const visualCandidates = [];
+    if (mentionActive) {
+      for (const element of visualNodes) {
+        const previous = runtime.composerVisualScrollbarNodes.has(element);
+        if (!isConnectedElement(element) || element === input ||
+            element === shell || element === form ||
+            element.matches('button,input,textarea,[contenteditable],[role="textbox"],'+
+              '[role="listbox"],[role="menu"],[role="button"],a') ||
+            element.closest('[role="dialog"],[aria-modal="true"],'+
+              '[role="listbox"],[role="menu"],.monaco-editor,.cm-editor')) continue;
+        // Preserve hidden previous candidates until the active mention ends:
+        // inspecting their zero-sized layout would make the guard flicker.
+        if (previous) {
+          visualCandidates.push({ element, previous, shouldHide: true,
+            width: 0, height: 0, reason: 'retained-active-mention' });
+          continue;
+        }
+        const rect = getVisibleRect(element);
+        if (!rect || rect.height < 4 || rect.height > 22 ||
+            rect.width < shellRect.width * 0.77 ||
+            rect.width > shellRect.width + 24 ||
+            Math.abs(rect.left - shellRect.left) > 28 ||
+            rect.top < inputRect.bottom - 5 ||
+            rect.top > Math.max(shellRect.bottom + 26, inputRect.bottom + 68) ||
+            String(element.textContent || '').trim() ||
+            element.matches('[aria-live]') ||
+            element.querySelector('button,input,textarea,[contenteditable],'+
+              '[role="button"],[role="option"],[role="listbox"]')) continue;
+        const css = getComputedStyle(element);
+        // Don't hide a genuine scrollport's content just because its visible
+        // container has the shape of a scrollbar track.
+        if (['auto','scroll','overlay'].includes(css.overflowX) &&
+            element.scrollWidth > element.clientWidth) continue;
+        if (css.position === 'fixed' || css.visibility === 'hidden') continue;
+        // Geometry alone also matches progress indicators, subtle borders and
+        // loading placeholders. Only hide an explicitly identified scrollbar.
+        const className = typeof element.className === 'string' ? element.className : '';
+        const isScrollbar = element.matches(
+          '[role="scrollbar"][aria-orientation="horizontal"],'+
+          '[data-orientation="horizontal"]'
+        ) || /(?:^|[\s_-])(scrollbar|scroll-thumb|scroll-track)(?:$|[\s_-])/i.test(className);
+        if (!isScrollbar) continue;
+        visualCandidates.push({ element, previous, shouldHide: true,
+          width: Math.round(rect.width), height: Math.round(rect.height),
+          reason: 'mention-adjacent-thin-bar' });
+      }
+    }
+    return { candidates: list, visualCandidates, input, mentionActive, probe };
+  }
+
+  // Read-only inspection of the compositor strip and its surrounding DOM.
+  // This is deliberately independent of the script's own guessed candidates.
+  function getComposerBarSurfaceProbe(input) {
+    const form = input?.closest('form');
+    const shell = form || input?.closest(SELECTOR.composerShell);
+    const rect = shell && getVisibleRect(shell);
+    if (!rect) return { reason: 'composer-shell-not-visible', points: [], ancestry: [] };
+    const ancestry = [];
+    for (let node = input, depth = 0; node && depth < 12;
+      node = node.parentElement, depth += 1) {
+      const r = getVisibleRect(node);
+      if (!r) continue;
+      const css = getComputedStyle(node);
+      ancestry.push({ tag: node.tagName.toLowerCase(), id: node.id || '',
+        className: typeof node.className === 'string' ? node.className.slice(0, 80) : '',
+        width: Math.round(r.width), height: Math.round(r.height),
+        overflowX: css.overflowX, scrollWidth: node.scrollWidth,
+        clientWidth: node.clientWidth, scrollLeft: node.scrollLeft });
+      if (node.matches('main,[role="main"]')) break;
+    }
+    const points = [];
+    if (typeof document.elementsFromPoint === 'function') {
+      for (const offset of [5, 10, 15]) {
+        const x = Math.round(rect.left + rect.width / 2);
+        const y = Math.round(rect.bottom + offset);
+        if (x < 0 || y < 0 || x >= innerWidth || y >= innerHeight) continue;
+        points.push({ x, y, elements: document.elementsFromPoint(x, y)
+          .slice(0, 6).map(node => {
+            const r = getVisibleRect(node);
+            const css = getComputedStyle(node);
+            return { tag: node.tagName.toLowerCase(), id: node.id || '',
+              className: typeof node.className === 'string'
+                ? node.className.slice(0, 80) : '',
+              width: r ? Math.round(r.width) : 0,
+              height: r ? Math.round(r.height) : 0,
+              top: r ? Math.round(r.top) : 0,
+              overflowX: css.overflowX,
+              scrollWidth: node.scrollWidth, clientWidth: node.clientWidth,
+              text: String(node.textContent || '').trim().slice(0, 45) };
+          }) });
+      }
+    }
+    return { shell: { left: Math.round(rect.left), top: Math.round(rect.top),
+      bottom: Math.round(rect.bottom), width: Math.round(rect.width),
+      height: Math.round(rect.height) }, points, ancestry };
+  }
+
+  function getComposerOverflowDiagnostics() {
+    const scan = getComposerScrollCandidates();
+    const describe = ({ element, ...details }) => ({
+      tag: element.tagName.toLowerCase(),
+      id: element.id || '',
+      className: typeof element.className === 'string'
+        ? element.className.slice(0, 100) : '',
+      ...details
+    });
+    return {
+      version: VERSION,
+      inputFound: Boolean(scan.input),
+      mentionActive: scan.mentionActive,
+      guardCount: runtime.composerScrollGuardNodes.size,
+      visualBarCount: runtime.composerVisualScrollbarNodes.size,
+      nativeScrollbarScopeCount: runtime.composerMentionScrollbarScopeNodes.size,
+      mentionPopup: inspectMentionPopup(scan.input, scan.mentionActive).result,
+      lastMentionPopupAudit: runtime.mentionPopupLastAudit,
+      surfaceProbe: getComposerBarSurfaceProbe(scan.input),
+      hitTestCandidates: scan.probe || [],
+      candidates: scan.candidates.filter(item => item.shouldGuard ||
+        item.previous || item.widthExcess > 0).map(describe),
+      visualCandidates: scan.visualCandidates.map(describe),
+      lastAudit: runtime.composerScrollGuardLastAudit
+    };
+  }
+
+  // CSP-safe console fallback: the page dispatches a plain DOM Event and
+  // receives read-only JSON via an HTML attribute (no inline script injection).
+  function onComposerDebugRequest() {
+    try {
+      const result = JSON.stringify(getComposerOverflowDiagnostics());
+      getRoot()?.setAttribute(COMPOSER_DEBUG_ATTR, result);
+    } catch (error) {
+      getRoot()?.setAttribute(COMPOSER_DEBUG_ATTR,
+        JSON.stringify({ version: VERSION, error: String(error?.message || error) }));
+    }
+  }
+
+  function auditComposerScrollGuard() {
+    if (!runtime.started || !settings.enabled || !settings.widenComposer ||
+        !isWideActive() || runtime.safeFallbackActive) {
+      clearComposerScrollGuard();
+      return;
+    }
+    const scan = getComposerScrollCandidates();
+    if (!scan.input) {
+      clearComposerScrollGuard();
+      return;
+    }
+    auditMentionPopup(scan.input, scan.mentionActive);
+    if (!settings.widenComposer) {
+      clearComposerScrollGuard(true);
+      return;
+    }
+    const next = new Set(scan.candidates.filter(item => item.shouldGuard)
+      .map(item => item.element));
+    for (const previous of runtime.composerScrollGuardNodes) {
+      if (!next.has(previous)) {
+        setBooleanAttribute(previous, COMPOSER_SCROLL_GUARD_ATTR, false);
+      }
+    }
+    for (const element of next) {
+      if (!runtime.composerScrollGuardNodes.has(element)) {
+        runtime.composerScrollGuardInitialOverflow.set(
+          element, getComputedStyle(element).overflowX
+        );
+      }
+      setBooleanAttribute(element, COMPOSER_SCROLL_GUARD_ATTR, true);
+    }
+    runtime.composerScrollGuardNodes = next;
+
+    const nextBars = new Set(scan.visualCandidates.filter(item => item.shouldHide)
+      .map(item => item.element));
+    for (const previous of runtime.composerVisualScrollbarNodes) {
+      if (!nextBars.has(previous)) {
+        setBooleanAttribute(previous, COMPOSER_VISUAL_SCROLLBAR_ATTR, false);
+      }
+    }
+    for (const element of nextBars) {
+      setBooleanAttribute(element, COMPOSER_VISUAL_SCROLLBAR_ATTR, true);
+    }
+    runtime.composerVisualScrollbarNodes = nextBars;
+
+    // Chrome may show a native horizontal scrollbar without any matching
+    // element or measurable scrollWidth overflow. Apply a cosmetic scrollbar
+    // track rule to only nearby, same-width composer hosts while @ is active.
+    const nextScopes = new Set();
+    if (scan.mentionActive) {
+      const form = scan.input.closest('form');
+      const shell = form || scan.input.closest(SELECTOR.composerShell);
+      const shellRect = shell && getVisibleRect(shell);
+      let node = form || shell;
+      for (let depth = 0; node && shellRect && depth < 8;
+        node = node.parentElement, depth += 1) {
+        const r = getVisibleRect(node);
+        if (!r || node.matches('main,[role="main"],body,html') ||
+            r.width > shellRect.width + 120 ||
+            r.height > Math.max(360, shellRect.height + 240)) break;
+        // Only a scrollbar-forced track with no scrollable horizontal
+        // content can be cosmetically suppressed. Keep genuine scrollports.
+        const style = getComputedStyle(node);
+        if (r.width >= shellRect.width * 0.72 &&
+            style.overflowX === 'scroll' &&
+            node.scrollWidth <= node.clientWidth + 1) {
+          nextScopes.add(node);
+        }
+      }
+    }
+    for (const previous of runtime.composerMentionScrollbarScopeNodes) {
+      if (!nextScopes.has(previous)) {
+        setBooleanAttribute(previous, COMPOSER_MENTION_SCROLL_SCOPE_ATTR, false);
+      }
+    }
+    for (const element of nextScopes) {
+      setBooleanAttribute(element, COMPOSER_MENTION_SCROLL_SCOPE_ATTR, true);
+    }
+    runtime.composerMentionScrollbarScopeNodes = nextScopes;
+    runtime.composerScrollGuardLastAudit = {
+      at: Date.now(), found: scan.candidates.length,
+      guarded: next.size, visualBars: nextBars.size,
+      nativeScrollbarScopes: nextScopes.size,
+      mentionActive: scan.mentionActive
+    };
+  }
+
+  function scheduleComposerScrollGuardAudit() {
+    if (!runtime.started || !settings.enabled) return;
+    if (runtime.composerScrollGuardFrame) {
+      cancelNextFrame(runtime.composerScrollGuardFrame);
+    }
+    const epoch = currentRuntimeEpoch();
+    runtime.composerScrollGuardFrame = requestNextFrame(() => {
+      runtime.composerScrollGuardFrame = 0;
+      if (rejectStaleCallback(epoch, 'composer-overflow-audit')) return;
+      auditComposerScrollGuard();
+    });
+    // React may mount @-mention UI asynchronously after the input event.
+    if (runtime.composerScrollGuardTimer) {
+      clearTimeout(runtime.composerScrollGuardTimer);
+    }
+    runtime.composerScrollGuardTimer = setTimeout(() => {
+      runtime.composerScrollGuardTimer = 0;
+      if (rejectStaleCallback(epoch, 'composer-overflow-delayed')) return;
+      auditComposerScrollGuard();
+    }, 110);
+    // Some autocomplete/scroll-area widgets settle after the first
+    // animation frame. One final bounded audit handles these delayed mounts.
+    if (runtime.composerScrollGuardLateTimer) {
+      clearTimeout(runtime.composerScrollGuardLateTimer);
+    }
+    runtime.composerScrollGuardLateTimer = setTimeout(() => {
+      runtime.composerScrollGuardLateTimer = 0;
+      if (rejectStaleCallback(epoch, 'composer-overflow-late')) return;
+      auditComposerScrollGuard();
+    }, 380);
+  }
+
+  function onComposerActivity(event) {
+    const target = event?.target;
+    if (!isElement(target) || !target.matches?.(SELECTOR.composerInput)) {
+      return;
+    }
+    scheduleComposerScrollGuardAudit();
+  }
+
+  function markComposer(desired, main) {
     if (!settings.widenComposer) {
       return;
     }
- 
+
     const input =
-      findComposerInput();
- 
+      findComposerInput(main);
+
     if (!input) {
       return;
     }
- 
-    const main =
-      nearestMain(input);
- 
-    if (!main) {
-      return;
-    }
- 
+
     let shell = null;
- 
+
     try {
       shell = input.closest(
         SELECTOR.composerShell
       );
     } catch (_) {}
- 
+
     if (!shell) {
       shell =
         input.closest('form') ||
         input.parentElement;
     }
- 
+
     if (
       !shell ||
       !main.contains(shell)
     ) {
       return;
     }
- 
+
     addDesiredMarker(
       desired,
       ATTR.composer,
       shell
     );
- 
+
     let current =
       shell.parentElement;
- 
+
     let depth = 0;
- 
+
     while (
       current &&
       current !== main &&
@@ -4597,7 +4863,7 @@ ${safeMediaCss}
         ATTR.composerPath,
         current
       );
- 
+
       if (
         depth >= 1 &&
         current.parentElement &&
@@ -4606,19 +4872,19 @@ ${safeMediaCss}
       ) {
         break;
       }
- 
+
       current =
         current.parentElement;
- 
+
       depth += 1;
     }
   }
- 
+
   function hasFreePlanNoticeText(element) {
     if (!isConnectedElement(element)) {
       return false;
     }
- 
+
     try {
       const raw = String(element.textContent || '');
       // Most candidate containers are not notices. Avoid expensive computed
@@ -4627,14 +4893,14 @@ ${safeMediaCss}
         return false;
       }
       const text = raw.replace(/\s+/g, ' ').trim().toLowerCase();
- 
+
       if (
         text.length < 8 ||
         text.length > 360
       ) {
         return false;
       }
- 
+
       return (
         text.includes("you're on the free plan") ||
         text.includes('you’re on the free plan') ||
@@ -4646,11 +4912,11 @@ ${safeMediaCss}
       return false;
     }
   }
- 
+
   function findPlanNoticeCandidate(main) {
     const excludedSelector =
       `${SELECTOR.preferredTurns},${SELECTOR.fallbackMessages},${SELECTOR.excludedComposerAncestor}`;
- 
+
     const chooseBest = (candidates) => {
       const matches = candidates.filter((element) => {
         if (
@@ -4659,101 +4925,84 @@ ${safeMediaCss}
         ) {
           return false;
         }
- 
+
         try {
           return !element.closest(excludedSelector);
         } catch (_) {
           return true;
         }
       });
- 
+
       matches.sort((a, b) => {
         if (a !== b) {
           if (a.contains(b)) {
             return 1;
           }
- 
+
           if (b.contains(a)) {
             return -1;
           }
         }
- 
+
         const aLength = String(a.textContent || '').length;
         const bLength = String(b.textContent || '').length;
         return aLength - bLength;
       });
- 
+
       return matches[0] || null;
     };
- 
+
     try {
       const semantic = Array.from(
         main.querySelectorAll(
           'aside,[role="status"],[role="note"],[aria-live],section'
         )
       );
- 
+
       runtime.lastPlanNoticeCandidateCount =
         semantic.length;
- 
+
       const semanticMatch =
         chooseBest(semantic);
- 
+
       if (semanticMatch) {
         return semanticMatch;
       }
- 
+
       const generic = Array.from(
         main.querySelectorAll('div')
       ).slice(-CONFIG.maxPlanNoticeCandidates);
- 
+
       runtime.lastPlanNoticeCandidateCount +=
         generic.length;
- 
+
       return chooseBest(generic);
     } catch (_) {
       runtime.lastPlanNoticeCandidateCount = 0;
       return null;
     }
   }
- 
-  function markPlanNotice(desired) {
+
+  function markPlanNotice(desired, main) {
     runtime.lastPlanNoticeScanAt = Date.now();
-    if (!isWideActive()) {
+    if (!main || !isWideActive()) {
       runtime.lastPlanNoticeCandidateCount = 0;
       return;
     }
- 
-    const main = (() => {
-      try {
-        return Array.from(
-          document.querySelectorAll(
-            SELECTOR.main
-          )
-        ).find(isVisibleElement) || null;
-      } catch (_) {
-        return null;
-      }
-    })();
- 
-    if (!main) {
-      runtime.lastPlanNoticeCandidateCount = 0;
-      return;
-    }
- 
+
     const notice =
       findPlanNoticeCandidate(main);
- 
+
     if (!notice) {
       return;
     }
- 
+
     addDesiredMarker(
       desired,
       ATTR.planNotice,
       notice
     );
- 
+
     addPath(
       desired,
       notice.parentElement,
@@ -4762,19 +5011,19 @@ ${safeMediaCss}
       CONFIG.maxPlanNoticePathDepth
     );
   }
- 
+
   function pushDebugEvent(type, details = null) {
     const event = {
       at: Date.now(),
       type: String(type || 'event')
     };
- 
+
     if (details !== null && details !== undefined) {
       event.details = details;
     }
- 
+
     runtime.debugEvents.push(event);
- 
+
     if (runtime.debugEvents.length > CONFIG.debugEventLimit) {
       runtime.debugEvents.splice(
         0,
@@ -4782,7 +5031,7 @@ ${safeMediaCss}
       );
     }
   }
- 
+
   function seedDesiredMarkers(desired, dirtyRegions) {
     const dirty = new Set(dirtyRegions);
     const groups = [
@@ -4801,20 +5050,20 @@ ${safeMediaCss}
         ATTR.planNoticePath
       ]]
     ];
- 
+
     for (const [region, attributes] of groups) {
       if (dirty.has(region)) {
         continue;
       }
- 
+
       for (const attribute of attributes) {
         const target = desired.get(attribute);
         const previous = runtime.marked.get(attribute);
- 
+
         if (!target || !previous) {
           continue;
         }
- 
+
         for (const element of previous) {
           if (isConnectedElement(element)) {
             target.add(element);
@@ -4823,7 +5072,7 @@ ${safeMediaCss}
       }
     }
   }
- 
+
   function recordRepairHistory(entry = {}) {
     const item = {
       at: Date.now(),
@@ -4837,23 +5086,23 @@ ${safeMediaCss}
       conservative: Boolean(entry.conservative),
       convergence: entry.convergence || null
     };
- 
+
     runtime.repairHistory.push(item);
- 
+
     if (runtime.repairHistory.length > CONFIG.repairHistoryLimit) {
       runtime.repairHistory.splice(
         0,
         runtime.repairHistory.length - CONFIG.repairHistoryLimit
       );
     }
- 
+
     return item;
   }
- 
+
   function getRepairEffectivenessMetrics() {
     const history =
       runtime.repairHistory;
- 
+
     const executed = history.length;
     const applied =
       history.filter(
@@ -4875,10 +5124,10 @@ ${safeMediaCss}
         (item) =>
           Number(item.level || 0) >= 4
       ).length;
- 
+
     const successful =
       applied + idempotent;
- 
+
     const totalDurationMs =
       history.reduce(
         (sum, item) =>
@@ -4886,7 +5135,7 @@ ${safeMediaCss}
           Number(item.durationMs || 0),
         0
       );
- 
+
     return {
       requested:
         runtime.repairRequestCount,
@@ -4934,7 +5183,7 @@ ${safeMediaCss}
         runtime.queuedReconciliationRunCount
     };
   }
- 
+
   function fingerprintFromCapabilities(capabilities) {
     const parts = [
       capabilities.strategy || 'unknown',
@@ -4947,24 +5196,24 @@ ${safeMediaCss}
       `ft${capabilities.fallbackTurnCount || 0}`,
       runtime.canvasDetected ? 'sv1' : 'sv0'
     ];
- 
+
     return parts.join('|');
   }
- 
+
   function computeDomFingerprint() {
     return fingerprintFromCapabilities(detectDomCapabilities());
   }
- 
+
   function updateDomFingerprint(reason = 'scan', capabilities = null) {
     const next = capabilities
       ? fingerprintFromCapabilities(capabilities)
       : computeDomFingerprint();
     const previous = runtime.lastDomFingerprint;
     const changed = Boolean(previous && previous !== next);
- 
+
     runtime.lastDomFingerprint = next;
     runtime.lastDomFingerprintAt = Date.now();
- 
+
     if (changed) {
       // Structural changes invalidate early document-start health snapshots.
       // This does not trigger a layout repair or introduce another scan loop.
@@ -4977,15 +5226,15 @@ ${safeMediaCss}
         next
       });
     }
- 
+
     return { changed, previous, current: next };
   }
- 
+
   function findVisibleManagedElement(attribute) {
     return Array.from(runtime.marked.get(attribute) || [])
       .find(isVisibleElement) || null;
   }
- 
+
   function getPaneOverflow(rect, paneRect) {
     return {
       leftPx: Math.max(0, paneRect.left - rect.left),
@@ -5060,27 +5309,27 @@ ${safeMediaCss}
       CONFIG.widthTolerancePx,
       expected * CONFIG.widthToleranceRatio
     );
- 
+
     const position = inspectConversationPosition();
     const turn = findVisibleManagedElement(ATTR.turn);
     const composer = findVisibleManagedElement(ATTR.composer);
     const turnWidth = Number(getVisibleRect(turn)?.width || 0);
     const composerWidth = Number(getVisibleRect(composer)?.width || 0);
- 
+
     const shouldVerify = Boolean(
       settings.enabled &&
       isWideActive() &&
       !runtime.safeFallbackActive &&
       expected >= 320
     );
- 
+
     // ChatGPT Work can have a compact, independent input (e.g. 720px) while
     // the transcript fills the pane. Only require full composer width when
     // ChatGPT's canonical full-width bottom container actually exists.
     // Otherwise a permanent false failure causes full scans every ~50ms.
     const canonicalComposer = isCanonicalComposer(composer);
     const composerWidthRequired = settings.widenComposer && canonicalComposer;
- 
+
     const checks = {
       turn: !shouldVerify || !turn ||
         Math.abs(turnWidth - expected) <= tolerance ||
@@ -5096,7 +5345,7 @@ ${safeMediaCss}
       panePosition: !shouldVerify || position.sampled === 0 ||
         (position.clippedLeftPx <= 8 && position.clippedRightPx <= 8)
     };
- 
+
     const result = {
       ok: Object.values(checks).every(Boolean),
       checkedAt: Date.now(),
@@ -5112,11 +5361,11 @@ ${safeMediaCss}
       composerLayout: canonicalComposer ? 'canonical-thread-bottom' : 'independent-work-or-custom',
       checks
     };
- 
+
     runtime.lastWidthVerification = result;
     return result;
   }
- 
+
   function deriveDesiredState() {
     const desired = {
       enabled: Boolean(settings.enabled),
@@ -5143,11 +5392,11 @@ ${safeMediaCss}
       markers: Boolean(settings.enabled),
       fingerprint: computeDomFingerprint()
     };
- 
+
     runtime.lastDesiredState = desired;
     return desired;
   }
- 
+
   function inspectActualState() {
     const root = getRoot();
     const actual = {
@@ -5170,23 +5419,23 @@ ${safeMediaCss}
       fingerprint: computeDomFingerprint(),
       width: verifyAppliedWidths()
     };
- 
+
     runtime.lastActualState = actual;
     return actual;
   }
- 
+
   function compareDesiredState(desired, actual) {
     const failures = [];
     const actions = new Set();
     const strategy = runtime.strategySelection || selectDomStrategy(
       runtime.lastCapabilities || detectDomCapabilities()
     );
- 
+
     if (desired.uiStyle !== actual.uiStyle) {
       failures.push(FAILURE_CODE.UI_STYLE_INTEGRITY);
       actions.add('styles');
     }
- 
+
     if (desired.mainStyle !== actual.mainStyle) {
       failures.push(
         desired.mainStyle
@@ -5195,7 +5444,7 @@ ${safeMediaCss}
       );
       actions.add('styles');
     }
- 
+
     if (
       desired.enabled !== actual.enabled ||
       desired.wide !== actual.wide ||
@@ -5207,7 +5456,7 @@ ${safeMediaCss}
       failures.push(FAILURE_CODE.ROOT_STATE_INTEGRITY);
       actions.add('root');
     }
- 
+
     if (
       desired.observers &&
       (!actual.rootObserver || !actual.bodyObserver || !actual.headObserver)
@@ -5215,17 +5464,17 @@ ${safeMediaCss}
       failures.push(FAILURE_CODE.OBSERVER_INTEGRITY);
       actions.add('observers');
     }
- 
+
     if (actual.disconnectedMarkers) {
       failures.push(FAILURE_CODE.DISCONNECTED_MARKERS);
       actions.add('markers');
     }
- 
+
     if (desired.markers && actual.markerAttributeDrift) {
       failures.push(FAILURE_CODE.MARKER_ATTRIBUTE_DRIFT);
       actions.add('markers');
     }
- 
+
     if (
       desired.markers &&
       runtime.lastTurnCount > 0 &&
@@ -5234,23 +5483,23 @@ ${safeMediaCss}
       failures.push(FAILURE_CODE.TURN_MARKERS_MISSING);
       actions.add('markers');
     }
- 
+
     if (
       desired.markers &&
       settings.widenComposer &&
-      document.querySelector(SELECTOR.composerInput) &&
-      !actual.composerMarker
+      !actual.composerMarker &&
+      findComposerInput(runtime.observedPane || resolveActivePane())
     ) {
       failures.push(FAILURE_CODE.COMPOSER_MARKER_MISSING);
       actions.add('markers');
     }
- 
+
     if (!actual.width.ok) {
       failures.push(FAILURE_CODE.WIDTH_VERIFICATION_FAILED);
       actions.add('markers');
       actions.add('root');
     }
- 
+
     if (
       runtime.lastDomFingerprintChangeAt > 0 &&
       Date.now() - runtime.lastDomFingerprintChangeAt <= CONFIG.fingerprintChangeCooldownMs
@@ -5258,13 +5507,13 @@ ${safeMediaCss}
       failures.push(FAILURE_CODE.DOM_FINGERPRINT_CHANGED);
       actions.add('full-scan');
     }
- 
+
     if (desired.enabled && strategy.lowConfidence) {
       failures.push(FAILURE_CODE.STRATEGY_LOW_CONFIDENCE);
       actions.add('root');
       actions.add('styles');
     }
- 
+
     const result = {
       ok: failures.length === 0,
       failures: normalizeFailureCodes(failures),
@@ -5277,14 +5526,14 @@ ${safeMediaCss}
         lowConfidence: strategy.lowConfidence
       }
     };
- 
+
     runtime.lastStateDiff = result;
     return result;
   }
- 
+
   function getRepairLevelForFailures(failures = []) {
     const set = new Set(normalizeFailureCodes(failures));
- 
+
     if (
       set.has(FAILURE_CODE.OBSERVER_INTEGRITY) ||
       set.has(FAILURE_CODE.DOM_FINGERPRINT_CHANGED)
@@ -5307,23 +5556,23 @@ ${safeMediaCss}
     if (set.has(FAILURE_CODE.RECONCILIATION_DID_NOT_CONVERGE)) return 5;
     return Math.min(5, Math.max(1, runtime.enforcementRetryCount + 1));
   }
- 
+
   function buildRepairPlan(diff, reason = 'repair', persist = true) {
     const failures = normalizeFailureCodes(diff?.failures || []);
     const requestedActions = new Set(diff?.actions || []);
     const lowConfidence = failures.includes(FAILURE_CODE.STRATEGY_LOW_CONFIDENCE);
     let level = getRepairLevelForFailures(failures);
- 
+
     if (runtime.convergenceStallCount >= CONFIG.convergenceStallLimit) {
       failures.push(FAILURE_CODE.RECONCILIATION_STALLED);
       level = Math.max(level, 4);
     }
- 
+
     if (runtime.convergenceStallCount >= CONFIG.convergenceHardLimit) {
       failures.push(FAILURE_CODE.RECONCILIATION_DID_NOT_CONVERGE);
       level = 5;
     }
- 
+
     const conservative = Boolean(lowConfidence);
     if (conservative) {
       requestedActions.delete('markers');
@@ -5332,12 +5581,12 @@ ${safeMediaCss}
       requestedActions.add('root');
       level = Math.min(level, 2);
     }
- 
+
     if (level >= 2) requestedActions.add('styles');
     if (level >= 1) requestedActions.add('root');
     if (level >= 4) requestedActions.add('observers');
     if (level >= 3 && !conservative) requestedActions.add('full-scan');
- 
+
     const plan = {
       id: ++runtime.repairPlanCounter,
       createdAt: Date.now(),
@@ -5347,27 +5596,27 @@ ${safeMediaCss}
       actions: [...requestedActions],
       conservative
     };
- 
+
     if (persist) {
       runtime.lastRepairPlan = plan;
     }
     return plan;
   }
- 
+
   function executeRepairPlan(plan) {
     if (!plan || !Array.isArray(plan.actions)) {
       return { ok: false, changed: false, reason: 'invalid-plan' };
     }
- 
+
     const startedAt = nowMs();
     const actions = new Set(plan.actions);
     let changed = false;
- 
+
     runtime.enforcementLevel = Math.max(
       runtime.enforcementLevel,
       Number(plan.level || 1)
     );
- 
+
     try {
       if (actions.has('styles')) {
         changed = ensureStyle(ID.uiStyle, getUiCss()) || changed;
@@ -5377,13 +5626,13 @@ ${safeMediaCss}
           changed = removeMainStyle() || changed;
         }
       }
- 
+
       if (actions.has('root')) {
         const before = rootStateMatches();
         settings.enabled ? setRootState() : clearRootState();
         changed = !before || changed;
       }
- 
+
       if (actions.has('observers')) {
         const before = Boolean(
           runtime.rootObserver && runtime.bodyObserver && runtime.headObserver
@@ -5395,7 +5644,7 @@ ${safeMediaCss}
         );
         changed = before !== after || changed;
       }
- 
+
       if (actions.has('markers') || actions.has('full-scan')) {
         requestRepair(
           `${plan.reason}-plan-${plan.id}`,
@@ -5404,7 +5653,7 @@ ${safeMediaCss}
         );
         changed = true;
       }
- 
+
       const result = {
         ok: true,
         changed,
@@ -5452,21 +5701,21 @@ ${safeMediaCss}
       return result;
     }
   }
- 
+
   function getDiffSignature(diff) {
     return JSON.stringify({
       failures: normalizeFailureCodes(diff?.failures || []).sort(),
       actions: [...(diff?.actions || [])].sort()
     });
   }
- 
+
   function trackConvergence(diff, changed = false) {
     const failures = normalizeFailureCodes(diff?.failures || []);
     const signature = getDiffSignature(diff);
     const previousSignature = runtime.convergenceSignature;
     const previousCount = runtime.convergencePreviousFailureCount;
     let status = 'progress';
- 
+
     if (diff?.ok) {
       runtime.convergenceStallCount = 0;
       runtime.convergencePassCount += 1;
@@ -5482,12 +5731,12 @@ ${safeMediaCss}
       runtime.convergenceStallCount = 0;
       status = 'changed';
     }
- 
+
     if (runtime.convergenceStallCount >= CONFIG.convergenceHardLimit) {
       runtime.convergenceFailureCount += 1;
       status = 'failed';
     }
- 
+
     runtime.convergenceSignature = signature;
     runtime.convergencePreviousFailureCount = failures.length;
     runtime.lastConvergence = {
@@ -5497,20 +5746,20 @@ ${safeMediaCss}
       failures,
       signature
     };
- 
+
     return runtime.lastConvergence;
   }
- 
+
   function applyReconciliation(diff, reason = 'reconcile') {
     if (!diff || diff.ok) {
       trackConvergence(diff || { ok: true, failures: [], actions: [] }, false);
       return false;
     }
- 
+
     const plan = buildRepairPlan(diff, reason);
     return executeRepairPlan(plan).changed;
   }
- 
+
   function performReconciliation(reason = 'reconcile') {
     const desired = deriveDesiredState();
     const initialActual = inspectActualState();
@@ -5519,17 +5768,17 @@ ${safeMediaCss}
         desired,
         initialActual
       );
- 
+
     if (initialDiff.ok) {
       runtime.reconcilePendingVerification = false;
       runtime.reconcilePendingSince = 0;
- 
+
       const convergence =
         trackConvergence(
           initialDiff,
           false
         );
- 
+
       return {
         ok: true,
         pending: false,
@@ -5545,16 +5794,16 @@ ${safeMediaCss}
         idempotent: true
       };
     }
- 
+
     const plan =
       buildRepairPlan(
         initialDiff,
         reason
       );
- 
+
     const execution =
       executeRepairPlan(plan);
- 
+
     if (!execution.ok) {
       return {
         ok: false,
@@ -5573,11 +5822,11 @@ ${safeMediaCss}
         idempotent: false
       };
     }
- 
+
     if (execution.pending) {
       runtime.reconcilePendingVerification = true;
       runtime.reconcilePendingSince = Date.now();
- 
+
       const convergence = {
         at: Date.now(),
         status: 'pending',
@@ -5590,10 +5839,10 @@ ${safeMediaCss}
         signature:
           getDiffSignature(initialDiff)
       };
- 
+
       runtime.lastConvergence =
         convergence;
- 
+
       return {
         ok: false,
         pending: true,
@@ -5610,25 +5859,25 @@ ${safeMediaCss}
         idempotent: false
       };
     }
- 
+
     runtime.reconcilePendingVerification = false;
     runtime.reconcilePendingSince = 0;
- 
+
     const actual =
       inspectActualState();
- 
+
     const diff =
       compareDesiredState(
         desired,
         actual
       );
- 
+
     const convergence =
       trackConvergence(
         diff,
         execution.changed
       );
- 
+
     return {
       ok: diff.ok,
       pending: false,
@@ -5647,7 +5896,7 @@ ${safeMediaCss}
         !execution.changed
     };
   }
- 
+
   function scheduleQueuedReconciliation() {
     if (
       !runtime.started ||
@@ -5658,14 +5907,14 @@ ${safeMediaCss}
     ) {
       return false;
     }
- 
+
     const epoch =
       currentRuntimeEpoch();
- 
+
     runtime.queuedReconciliationFrame =
       requestNextFrame(() => {
         runtime.queuedReconciliationFrame = 0;
- 
+
         if (
           rejectStaleCallback(
             epoch,
@@ -5674,22 +5923,22 @@ ${safeMediaCss}
         ) {
           return;
         }
- 
+
         const reasons = [
           ...runtime.queuedReconciliationReasons
         ];
- 
+
         runtime.queuedReconciliationReasons.clear();
         runtime.queuedReconciliationRunCount += 1;
- 
+
         reconcileDesiredState(
           `queued:${reasons.join(',')}`
         );
       });
- 
+
     return true;
   }
- 
+
   function reconcileDesiredState(reason = 'reconcile') {
     if (
       runtime.reconcileInProgress ||
@@ -5700,7 +5949,7 @@ ${safeMediaCss}
       runtime.queuedReconciliationReasons.add(
         String(reason || 'reconcile')
       );
- 
+
       return {
         ok: false,
         pending: true,
@@ -5718,21 +5967,21 @@ ${safeMediaCss}
           runtime.lastConvergence
       };
     }
- 
+
     const startedAt = nowMs();
     runtime.reconcileInProgress = true;
- 
+
     try {
       const result =
         performReconciliation(reason);
- 
+
       return {
         ...result,
         queued: false
       };
     } finally {
       runtime.reconcileInProgress = false;
- 
+
       recordPerformanceSample(
         'reconcile',
         Math.max(
@@ -5740,11 +5989,11 @@ ${safeMediaCss}
           nowMs() - startedAt
         )
       );
- 
+
       scheduleQueuedReconciliation();
     }
   }
- 
+
   function executeRepairLevel(level, reason, failures = []) {
     const normalized = normalizeFailureCodes(failures);
     const diff = {
@@ -5760,25 +6009,25 @@ ${safeMediaCss}
     if (plan.level >= 4) plan.actions = [...new Set([...plan.actions, 'observers'])];
     return executeRepairPlan(plan).ok;
   }
- 
+
   function getHealthBreakdown(refreshSelectors = false) {
     const verification =
       verifyRuntime();
- 
+
     const width =
       runtime.lastWidthVerification ||
       verifyAppliedWidths();
- 
+
     const compatibility =
       runtime.lastCompatibility ||
       evaluateCompatibility();
- 
+
     const selectors =
       getSelectorHealthSummary(refreshSelectors);
- 
+
     const performance =
       getPerformanceBudgetReport();
- 
+
     const runtimeChecks = [
       verification.checks.started,
       verification.checks.rootObserver,
@@ -5787,26 +6036,26 @@ ${safeMediaCss}
       verification.checks.enforcementTimer,
       verification.checks.schedulerState
     ];
- 
+
     const runtimeScore = Math.round(
       100 *
       runtimeChecks.filter(Boolean).length /
       runtimeChecks.length
     );
- 
+
     const styleChecks = [
       verification.checks.mainStyle,
       verification.checks.uiStyle,
       verification.checks.rootState,
       verification.checks.rootEnabledState
     ];
- 
+
     const stylesScore = Math.round(
       100 *
       styleChecks.filter(Boolean).length /
       styleChecks.length
     );
- 
+
     const domScore = Math.round(
       Math.max(
         0,
@@ -5821,7 +6070,7 @@ ${safeMediaCss}
         )
       )
     );
- 
+
     const widthScore =
       width.ok
         ? 100
@@ -5839,39 +6088,39 @@ ${safeMediaCss}
               )
             )
           );
- 
+
     let reconciliationScore = 100;
- 
+
     reconciliationScore -=
       Math.min(
         45,
         runtime.convergenceStallCount *
           12
       );
- 
+
     if (runtime.safeFallbackActive) {
       reconciliationScore -= 25;
     }
- 
+
     if (
       runtime.strategySelection?.lowConfidence
     ) {
       reconciliationScore -= 15;
     }
- 
+
     if (runtime.reconcileInProgress) {
       reconciliationScore -= 3;
     }
- 
+
     reconciliationScore =
       Math.max(
         0,
         reconciliationScore
       );
- 
+
     const performanceScore =
       performance.score;
- 
+
     const breakdown = {
       runtime: runtimeScore,
       styles: stylesScore,
@@ -5882,7 +6131,7 @@ ${safeMediaCss}
       performance:
         performanceScore
     };
- 
+
     const score = Math.round(
       runtimeScore * 0.20 +
       stylesScore * 0.15 +
@@ -5891,7 +6140,7 @@ ${safeMediaCss}
       reconciliationScore * 0.15 +
       performanceScore * 0.10
     );
- 
+
     return {
       score:
         Math.max(
@@ -5909,11 +6158,11 @@ ${safeMediaCss}
       performance
     };
   }
- 
+
   function calculateHealthScore(refreshSelectors = false) {
     const result =
       getHealthBreakdown(refreshSelectors);
- 
+
     runtime.healthScore =
       result.score;
     runtime.healthStatus =
@@ -5921,10 +6170,10 @@ ${safeMediaCss}
     runtime.healthBreakdown =
       result.breakdown;
     runtime.healthSnapshotDirty = false;
- 
+
     return result;
   }
- 
+
   function inspectLifecycleState(expectedRunning) {
     const root = getRoot();
     const styleCount = document.querySelectorAll(`#${ID.style}`).length;
@@ -5937,7 +6186,7 @@ ${safeMediaCss}
       ATTR.left,
       ATTR.canvas
     ].some((attribute) => root?.hasAttribute(attribute));
- 
+
     const checks = expectedRunning
       ? {
           started: runtime.started,
@@ -5959,17 +6208,17 @@ ${safeMediaCss}
           rootClean: !rootAttributesPresent,
           markersClean: !MANAGED_MARKERS.some(hasConnectedMarker)
         };
- 
+
     return {
       ok: Object.values(checks).every(Boolean),
       checks
     };
   }
- 
+
   function lifecycleTick() {
     return new Promise((resolve) => window.setTimeout(resolve, 0));
   }
- 
+
   async function lifecycleTortureSelfTest(options = {}) {
     if (runtime.lifecycleTestRunning) {
       return {
@@ -5978,7 +6227,7 @@ ${safeMediaCss}
         error: 'Lifecycle torture self-test already running'
       };
     }
- 
+
     runtime.lifecycleTestRunning = true;
     runtime.lifecycleTestCount += 1;
     const startedAt = nowMs();
@@ -6001,17 +6250,17 @@ ${safeMediaCss}
       Math.min(5, Number(options.cycles || CONFIG.lifecycleTortureCycles) || CONFIG.lifecycleTortureCycles)
     );
     const results = [];
- 
+
     try {
       for (let cycle = 1; cycle <= cycles; cycle += 1) {
         if (runtime.started) stop();
         await lifecycleTick();
         const stopped = inspectLifecycleState(false);
- 
+
         start();
         await lifecycleTick();
         const running = inspectLifecycleState(true);
- 
+
         results.push({
           cycle,
           stopped,
@@ -6019,12 +6268,12 @@ ${safeMediaCss}
           ok: stopped.ok && running.ok
         });
       }
- 
+
       if (!originalStarted && runtime.started) {
         stop();
         await lifecycleTick();
       }
- 
+
       const result = {
         ok: results.every((item) => item.ok),
         cycles,
@@ -6052,7 +6301,7 @@ ${safeMediaCss}
       } else if (!originalStarted && runtime.started) {
         stop();
       }
- 
+
       runtime.repairHistory = originalRepairHistory;
       runtime.lastRepairPlan = originalRepairPlan;
       runtime.lastRepairPlanResult = originalRepairPlanResult;
@@ -6067,7 +6316,7 @@ ${safeMediaCss}
       runtime.lifecycleTestRunning = false;
     }
   }
- 
+
   function selfTest() {
     const startedAt = nowMs();
     const fingerprint =
@@ -6097,18 +6346,18 @@ ${safeMediaCss}
         runtime.lastCapabilities ||
         detectDomCapabilities()
       );
- 
+
     const durationMs =
       Math.max(
         0,
         nowMs() - startedAt
       );
- 
+
     recordPerformanceSample(
       'selfTest',
       durationMs
     );
- 
+
     return {
       ok:
         verification.ok &&
@@ -6153,22 +6402,22 @@ ${safeMediaCss}
       width
     };
   }
- 
+
   function regressionTest() {
     const startedAt = nowMs();
     const results = [];
- 
+
     const test = (name, run) => {
       try {
         const detail = run();
- 
+
         const ok =
           detail === true ||
           Boolean(
             detail &&
             detail.ok !== false
           );
- 
+
         results.push({
           name,
           ok,
@@ -6189,7 +6438,7 @@ ${safeMediaCss}
         });
       }
     };
- 
+
     test(
       'settings-normalization',
       () => {
@@ -6199,7 +6448,7 @@ ${safeMediaCss}
             gutterMax: 9999,
             autoMinWidth: 1
           });
- 
+
         return {
           ok:
             normalized.gutterMin ===
@@ -6211,7 +6460,7 @@ ${safeMediaCss}
         };
       }
     );
- 
+
     test(
       'low-power-settings-contract',
       () => ({
@@ -6221,7 +6470,7 @@ ${safeMediaCss}
           normalizeSettings({lowPowerMode: 'false'}).lowPowerMode === true
       })
     );
- 
+
     test(
       'low-power-stream-mutation-contract',
       () => {
@@ -6250,7 +6499,7 @@ ${safeMediaCss}
         };
       }
     );
- 
+
     test(
       'failure-code-normalization',
       () => ({
@@ -6261,7 +6510,7 @@ ${safeMediaCss}
           FAILURE_CODE.MAIN_STYLE_MISSING
       })
     );
- 
+
     test(
       'strategy-scoring',
       () => {
@@ -6271,7 +6520,7 @@ ${safeMediaCss}
               item.id ===
               'virtualized-thread'
           );
- 
+
         const score =
           strategy.score({
             transcriptRoot: true,
@@ -6280,14 +6529,14 @@ ${safeMediaCss}
             threadBottomContainer: true,
             promptTextarea: true
           });
- 
+
         return {
           ok: score === 100,
           score
         };
       }
     );
- 
+
     test(
       'repair-level-selection',
       () => ({
@@ -6300,7 +6549,7 @@ ${safeMediaCss}
           ]) === 4
       })
     );
- 
+
     test(
       'selector-registry-contract',
       () => ({
@@ -6314,7 +6563,7 @@ ${safeMediaCss}
           )
       })
     );
- 
+
     test(
       'performance-budget-contract',
       () => ({
@@ -6330,7 +6579,7 @@ ${safeMediaCss}
           ].sort().join('|')
       })
     );
- 
+
     test(
       'performance-severity-grading',
       () => ({
@@ -6342,7 +6591,7 @@ ${safeMediaCss}
           performanceScoreFromExcess(16 * 10, 10) === 0
       })
     );
- 
+
     test(
       'performance-manual-test-exclusion',
       () => {
@@ -6360,7 +6609,7 @@ ${safeMediaCss}
         };
       }
     );
- 
+
     test(
       'epoch-contract',
       () => ({
@@ -6377,7 +6626,7 @@ ${safeMediaCss}
           )
       })
     );
- 
+
     test(
       'reconciliation-lock-contract',
       () => ({
@@ -6388,13 +6637,13 @@ ${safeMediaCss}
             'boolean'
       })
     );
- 
+
     test(
       'health-breakdown-contract',
       () => {
         const health =
           getHealthBreakdown();
- 
+
         return {
           ok:
             health.score >= 0 &&
@@ -6416,7 +6665,7 @@ ${safeMediaCss}
         };
       }
     );
- 
+
     test(
       'canonical-product-name',
       () => ({
@@ -6425,7 +6674,7 @@ ${safeMediaCss}
           'UltraWide ChatGPT'
       })
     );
- 
+
     test(
       'pending-reconciliation-contract',
       () => ({
@@ -6437,13 +6686,13 @@ ${safeMediaCss}
           )
       })
     );
- 
+
     test(
       'repair-metrics-contract',
       () => {
         const metrics =
           getRepairEffectivenessMetrics();
- 
+
         return {
           ok:
             Number.isFinite(
@@ -6455,7 +6704,7 @@ ${safeMediaCss}
         };
       }
     );
- 
+
     test(
       'initial-layout-contract',
       () => ({
@@ -6468,7 +6717,7 @@ ${safeMediaCss}
             Boolean(runtime.idleCallback))
       })
     );
- 
+
     test(
       'marker-drift-recovery',
       () => {
@@ -6495,24 +6744,33 @@ ${safeMediaCss}
         }
       }
     );
- 
+
     test(
-      'composer-css-toggle',
+      'composer-css-toggle-and-local-width-boundary',
       () => {
         const previous = settings.widenComposer;
-        const needle = '#thread-bottom-container{\n  --thread-content-responsive-max-width';
+        const localWidth = '--thread-content-max-width:min(100%,var(--uwc-content-width))!important;';
         try {
           settings.widenComposer = true;
           const enabledCss = buildMainCss();
           settings.widenComposer = false;
           const disabledCss = buildMainCss();
-          return { ok: enabledCss.includes(needle) && !disabledCss.includes(needle) };
+          return {
+            ok: enabledCss.includes(localWidth) &&
+              enabledCss.includes('overflow-x:clip!important;') &&
+              enabledCss.includes('#thread-bottom-container{\n  width:100%!important;') &&
+              enabledCss.includes('[data-uwc-composer-scroll-guard="1"]') &&
+              enabledCss.includes(`#thread-bottom-container[${ATTR.composer}="1"]{\n  width:100%!important;\n  max-width:100%!important;`) &&
+              !disabledCss.includes(localWidth) &&
+              enabledCss.includes('[data-uwc-composer-visual-scrollbar="1"]') &&
+              !disabledCss.includes('[data-uwc-composer-scroll-guard="1"]')
+          };
         } finally {
           settings.widenComposer = previous;
         }
       }
     );
- 
+
     test(
       'mutation-intent-consumption',
       () => {
@@ -6528,7 +6786,7 @@ ${safeMediaCss}
         };
       }
     );
- 
+
     test(
       'disabled-root-contract',
       () => {
@@ -6537,7 +6795,7 @@ ${safeMediaCss}
         return { ok: rootStateMatches() };
       }
     );
- 
+
     test(
       'reconciliation-pending-queue-contract',
       () => {
@@ -6557,13 +6815,13 @@ ${safeMediaCss}
         }
       }
     );
- 
+
     const durationMs =
       Math.max(
         0,
         nowMs() - startedAt
       );
- 
+
     return {
       ok:
         results.every(
@@ -6582,20 +6840,20 @@ ${safeMediaCss}
       results
     };
   }
- 
+
   function evaluateLayoutInvariants() {
     const root = getRoot();
     const pane = resolveActivePane();
     const failures = [];
- 
+
     if (!runtime.started) {
       failures.push(FAILURE_CODE.RUNTIME_NOT_STARTED);
     }
- 
+
     if (settings.enabled) {
       const mainStyle =
         document.getElementById(ID.style);
- 
+
       if (!mainStyle) {
         failures.push(FAILURE_CODE.MAIN_STYLE_MISSING);
       } else if (
@@ -6603,24 +6861,28 @@ ${safeMediaCss}
       ) {
         failures.push(FAILURE_CODE.MAIN_STYLE_INTEGRITY);
       }
- 
+
       if (root?.getAttribute(ATTR.enabled) !== '1') {
         failures.push(FAILURE_CODE.ROOT_ENABLED_STATE);
       }
- 
+
       if (!rootStateMatches()) {
         failures.push(FAILURE_CODE.ROOT_STATE_INTEGRITY);
       }
     }
- 
+
     if (hasDisconnectedMarkers()) {
       failures.push(FAILURE_CODE.DISCONNECTED_MARKERS);
     }
- 
-    if (settings.enabled && hasMarkerAttributeDrift()) {
+
+    const markedPanes = runtime.marked.get(ATTR.pane);
+    if (settings.enabled && (
+      hasMarkerAttributeDrift() ||
+      (pane ? !markedPanes?.has(pane) : markedPanes?.size)
+    )) {
       failures.push(FAILURE_CODE.MARKER_ATTRIBUTE_DRIFT);
     }
- 
+
     if (
       settings.enabled &&
       runtime.lastTurnCount > 0 &&
@@ -6628,16 +6890,16 @@ ${safeMediaCss}
     ) {
       failures.push(FAILURE_CODE.TURN_MARKERS_MISSING);
     }
- 
+
     if (
       settings.enabled &&
       settings.widenComposer &&
-      document.querySelector(SELECTOR.composerInput) &&
-      !hasConnectedMarker(ATTR.composer)
+      !hasConnectedMarker(ATTR.composer) &&
+      findComposerInput(pane)
     ) {
       failures.push(FAILURE_CODE.COMPOSER_MARKER_MISSING);
     }
- 
+
     if (
       settings.enabled &&
       isWideActive() &&
@@ -6648,22 +6910,22 @@ ${safeMediaCss}
       const paneRect = getVisibleRect(pane);
       const maxAllowedWidth =
         Math.max(0, Number(paneRect?.width || 0)) + 4;
- 
+
       const representatives = [
         runtime.marked.get(ATTR.turn),
         runtime.marked.get(ATTR.composer)
       ];
- 
+
       for (const elements of representatives) {
         const element = Array.from(elements || [])
           .find(isVisibleElement);
- 
+
         if (!element || maxAllowedWidth <= 4) {
           continue;
         }
- 
+
         const rect = getVisibleRect(element);
- 
+
         if (
           rect &&
           rect.width > maxAllowedWidth
@@ -6672,14 +6934,14 @@ ${safeMediaCss}
           break;
         }
       }
- 
+
       const expectedContentWidth =
         getExpectedContentWidthPx(
           paneRect?.width || 0
         );
- 
+
       let widthAnchor = null;
- 
+
       try {
         widthAnchor =
           Array.from(
@@ -6691,10 +6953,10 @@ ${safeMediaCss}
             )
           ).find(isVisibleElement) || null;
       } catch (_) {}
- 
+
       const anchorRect =
         getVisibleRect(widthAnchor);
- 
+
       if (
         expectedContentWidth >= 640 &&
         anchorRect &&
@@ -6706,57 +6968,57 @@ ${safeMediaCss}
         );
       }
     }
- 
+
     const result = {
       ok: failures.length === 0,
       failures,
       checkedAt: Date.now()
     };
- 
+
     runtime.lastInvariants = result;
     return result;
   }
- 
+
   function activateSafeFallback(reason) {
     if (runtime.safeFallbackActive) {
       return false;
     }
- 
+
     runtime.safeFallbackActive = true;
     runtime.safeFallbackReason = String(
       reason || 'layout-invariant-failure'
     );
- 
+
     setRootState();
     pushDebugEvent('safe-fallback', {
       reason: runtime.safeFallbackReason
     });
- 
+
     console.warn(
       '[UltraWide] Safe fallback activated:',
       runtime.safeFallbackReason
     );
- 
+
     return true;
   }
- 
+
   function clearSafeFallback(reason = 'manual-reset') {
     const wasActive = runtime.safeFallbackActive;
- 
+
     runtime.safeFallbackActive = false;
     runtime.safeFallbackReason = '';
     runtime.invariantFailureStreak = 0;
     setRootState();
- 
+
     if (wasActive) {
       pushDebugEvent('safe-fallback-cleared', {
         reason
       });
     }
- 
+
     return wasActive;
   }
- 
+
   function processInvariantResult(result) {
     if (result.ok) {
       runtime.invariantFailureStreak = 0;
@@ -6765,38 +7027,38 @@ ${safeMediaCss}
       runtime.lastEnforcementFailures = [];
       return;
     }
- 
+
     runtime.invariantFailureStreak += 1;
     runtime.lastEnforcementFailures = normalizeFailureCodes(result.failures);
- 
+
     pushDebugEvent('invariant-failure', {
       streak: runtime.invariantFailureStreak,
       failures: result.failures
     });
- 
+
     const canRetry =
       runtime.started &&
       settings.enabled &&
       !shouldPauseWork() &&
       runtime.enforcementRetryCount < CONFIG.enforcementRetryLimit;
- 
+
     if (canRetry) {
       runtime.enforcementRetryCount += 1;
       runtime.enforcementRepairCount += 1;
       runtime.lastEnforcementRepairAt = Date.now();
- 
+
       const baseLevel = getRepairLevelForFailures(result.failures);
       const level = Math.min(
         5,
         Math.max(baseLevel, runtime.enforcementRetryCount)
       );
- 
+
       pushDebugEvent('invariant-auto-repair', {
         attempt: runtime.enforcementRetryCount,
         level,
         failures: result.failures
       });
- 
+
       executeRepairLevel(
         level,
         'invariant-auto-repair',
@@ -6804,9 +7066,9 @@ ${safeMediaCss}
       );
       return;
     }
- 
+
     const geometryUnsafe = normalizeFailureCodes(result.failures).includes(FAILURE_CODE.WIDTH_EXCEEDS_PANE);
- 
+
     if (
       geometryUnsafe &&
       runtime.invariantFailureStreak >= CONFIG.invariantFailureThreshold
@@ -6814,7 +7076,7 @@ ${safeMediaCss}
       activateSafeFallback(result.failures.join(','));
     }
   }
- 
+
   // Running a health report inside the watchdog repeats its own layout and
   // selector checks, and is unnecessary unless someone requests diagnostics.
   // The watchdog continues to verify/repair the layout on its usual schedule.
@@ -6822,20 +7084,20 @@ ${safeMediaCss}
     runtime.healthSnapshotDirty = true;
     runtime.watchdogHealthDeferrals += 1;
   }
- 
+
   function enforceRuntimeIntegrity(reason = 'watchdog') {
     if (!runtime.started || shouldPauseWork()) {
       return false;
     }
- 
+
     runtime.enforcementCheckCount += 1;
     runtime.lastEnforcementAt = Date.now();
- 
+
     attachObservers();
     attachPaneResizeObserver();
     detectCanvas();
     updateDomFingerprint(reason);
- 
+
     if (!settings.enabled) {
       let repaired = false;
       if (document.getElementById(ID.style)) {
@@ -6854,9 +7116,9 @@ ${safeMediaCss}
       deferWatchdogHealthRefresh();
       return repaired;
     }
- 
+
     const reconciliation = reconcileDesiredState(reason);
- 
+
     if (!reconciliation.diff.ok) {
       runtime.enforcementRepairCount += reconciliation.changed ? 1 : 0;
       if (reconciliation.changed) {
@@ -6868,9 +7130,9 @@ ${safeMediaCss}
       deferWatchdogHealthRefresh();
       return Boolean(reconciliation.changed);
     }
- 
+
     const invariants = evaluateLayoutInvariants();
- 
+
     if (
       !invariants.ok &&
       runtime.enforcementRetryCount >= CONFIG.enforcementRetryLimit &&
@@ -6878,13 +7140,13 @@ ${safeMediaCss}
     ) {
       runtime.enforcementRetryCount = 0;
     }
- 
+
     if (!invariants.ok) {
       processInvariantResult(invariants);
       deferWatchdogHealthRefresh();
       return true;
     }
- 
+
     if (
       runtime.safeFallbackActive &&
       Date.now() - runtime.lastEnforcementRepairAt >= CONFIG.enforcementRetryCooldownMs
@@ -6906,14 +7168,14 @@ ${safeMediaCss}
       deferWatchdogHealthRefresh();
       return true;
     }
- 
+
     runtime.enforcementRetryCount = 0;
     runtime.enforcementLevel = 0;
     runtime.lastEnforcementFailures = [];
     deferWatchdogHealthRefresh();
     return false;
   }
- 
+
   function performScan(
     dirtyRegions = ALL_DIRTY_REGIONS,
     reasons = ['scan']
@@ -6922,7 +7184,7 @@ ${safeMediaCss}
       runtime.deferredScan = true;
       return;
     }
- 
+
     if (!settings.enabled) {
       clearManagedMarkers();
       clearRootState();
@@ -6930,49 +7192,57 @@ ${safeMediaCss}
       runtime.deferredScan = false;
       return;
     }
- 
+
     const dirty = new Set(
       dirtyRegions?.length
         ? dirtyRegions
         : ALL_DIRTY_REGIONS
     );
- 
+
     const startedAt = nowMs();
- 
+
     runtime.lastScanAt = Date.now();
     runtime.lastRepairAt = runtime.lastScanAt;
     runtime.lastRepairReasons = [...reasons];
     runtime.lastError = null;
     runtime.deferredScan = false;
     runtime.repairPassCount += 1;
- 
+
     pushDebugEvent('repair-pass', {
       reasons: [...reasons],
       dirty: [...dirty]
     });
- 
+
     try {
+      const pane = resolveActivePane();
+      const previousPanes = runtime.marked.get(ATTR.pane);
+      if (pane ? !previousPanes?.has(pane) : previousPanes?.size) {
+        ALL_DIRTY_REGIONS.forEach((region) => dirty.add(region));
+      }
+      attachPaneResizeObserver(pane);
+
       const desired = createDesiredMarkers();
       seedDesiredMarkers(desired, dirty);
- 
+      addDesiredMarker(desired, ATTR.pane, pane);
+
       if (dirty.has(DIRTY.split)) {
         detectCanvas();
       }
- 
+
       if (dirty.has(DIRTY.conversation)) {
-        markConversation(desired);
+        markConversation(desired, pane);
       }
- 
+
       if (dirty.has(DIRTY.composer)) {
-        markComposer(desired);
+        markComposer(desired, pane);
       }
- 
+
       if (dirty.has(DIRTY.notice)) {
-        markPlanNotice(desired);
+        markPlanNotice(desired, pane);
       }
- 
+
       applyMarkerDiff(desired);
-      attachPaneResizeObserver();
+      scheduleComposerScrollGuardAudit();
       const capabilities = detectDomCapabilities(true);
       evaluateCompatibility(capabilities);
       setRootState();
@@ -6980,10 +7250,10 @@ ${safeMediaCss}
       scheduleClipAlignment();
       verifyAppliedWidths();
       runtime.scanCount += 1;
- 
+
       const scanInvariants =
         evaluateLayoutInvariants();
- 
+
       if (runtime.reconcilePendingVerification) {
         runtime.reconcilePendingVerification = false;
         runtime.reconcilePendingSince = 0;
@@ -7024,7 +7294,7 @@ ${safeMediaCss}
       } else {
         processInvariantResult(scanInvariants);
       }
- 
+
       syncDebugOverlay();
     } catch (error) {
       // A failed asynchronous scan cannot leave reconciliation locked.
@@ -7033,11 +7303,11 @@ ${safeMediaCss}
       runtime.lastError = String(
         error?.message || error
       );
- 
+
       pushDebugEvent('repair-error', {
         message: runtime.lastError
       });
- 
+
       console.error(
         '[UltraWide] Layout scan failed:',
         error
@@ -7047,12 +7317,12 @@ ${safeMediaCss}
         0,
         nowMs() - startedAt
       );
- 
+
       recordPerformanceSample(
         'fullScan',
         duration
       );
- 
+
       if (settings.performanceTelemetry) {
         runtime.lastScanDurationMs = duration;
         runtime.totalScanDurationMs += duration;
@@ -7064,13 +7334,13 @@ ${safeMediaCss}
       }
     }
   }
- 
+
   function cancelScheduledScan() {
     if (runtime.scanTimer) {
       clearTimeout(runtime.scanTimer);
       runtime.scanTimer = 0;
     }
- 
+
     if (
       runtime.idleCallback &&
       typeof cancelIdleCallback === 'function'
@@ -7078,13 +7348,13 @@ ${safeMediaCss}
       cancelIdleCallback(runtime.idleCallback);
       runtime.idleCallback = 0;
     }
- 
+
     if (runtime.animationFrame) {
       cancelNextFrame(runtime.animationFrame);
       runtime.animationFrame = 0;
     }
   }
- 
+
   function requestRepair(
     reason = 'repair',
     dirtyRegions = ALL_DIRTY_REGIONS,
@@ -7093,27 +7363,27 @@ ${safeMediaCss}
     if (!runtime.started && !force) {
       return false;
     }
- 
+
     const requestEpoch =
       currentRuntimeEpoch();
- 
+
     runtime.repairRequestCount += 1;
     runtime.pendingRepairReasons.add(
       String(reason || 'repair')
     );
- 
+
     for (const region of dirtyRegions || []) {
       if (ALL_DIRTY_REGIONS.includes(region)) {
         runtime.pendingDirtyRegions.add(region);
       }
     }
- 
+
     if (runtime.pendingDirtyRegions.size === 0) {
       ALL_DIRTY_REGIONS.forEach((region) =>
         runtime.pendingDirtyRegions.add(region)
       );
     }
- 
+
     if (shouldPauseWork()) {
       runtime.deferredScan = true;
       pushDebugEvent('repair-deferred', {
@@ -7121,27 +7391,27 @@ ${safeMediaCss}
       });
       return false;
     }
- 
+
     const alreadyScheduled = Boolean(
       runtime.scanTimer ||
       runtime.idleCallback ||
       runtime.animationFrame
     );
- 
+
     if (alreadyScheduled && !force) {
       runtime.coalescedRepairCount += 1;
       return true;
     }
- 
+
     if (force) {
       cancelScheduledScan();
     }
- 
+
     const run = () => {
       runtime.scanTimer = 0;
       runtime.idleCallback = 0;
       runtime.animationFrame = 0;
- 
+
       if (
         rejectStaleCallback(
           requestEpoch,
@@ -7150,32 +7420,32 @@ ${safeMediaCss}
       ) {
         return;
       }
- 
+
       const reasons = [
         ...runtime.pendingRepairReasons
       ];
- 
+
       const dirty = [
         ...runtime.pendingDirtyRegions
       ];
- 
+
       runtime.pendingRepairReasons.clear();
       runtime.pendingDirtyRegions.clear();
- 
+
       if (runtime.started || force) {
         performScan(dirty, reasons);
       }
     };
- 
+
     if (force) {
       runtime.animationFrame =
         requestNextFrame(run);
       return true;
     }
- 
+
     runtime.scanTimer = window.setTimeout(() => {
       runtime.scanTimer = 0;
- 
+
       if (
         typeof requestIdleCallback === 'function'
       ) {
@@ -7189,10 +7459,10 @@ ${safeMediaCss}
     }, settings.lowPowerMode
       ? Math.max(settings.scanDebounceMs, CONFIG.lowPowerScanDebounceMs)
       : settings.scanDebounceMs);
- 
+
     return true;
   }
- 
+
   function scheduleScan(force = false) {
     return requestRepair(
       force ? 'forced-scan' : 'scan',
@@ -7200,13 +7470,13 @@ ${safeMediaCss}
       force
     );
   }
- 
+
   function applyStyles() {
     ensureStyle(
       ID.uiStyle,
       getUiCss()
     );
- 
+
     if (!settings.enabled) {
       removeMainStyle();
       clearRootState();
@@ -7214,12 +7484,12 @@ ${safeMediaCss}
       removeById(ID.debugOverlay);
       return;
     }
- 
+
     ensureStyle(
       ID.style,
       getMainCss()
     );
- 
+
     attachPaneResizeObserver();
     setRootState();
     syncDebugOverlay();
@@ -7229,110 +7499,110 @@ ${safeMediaCss}
       true
     );
   }
- 
+
   function showToast(message) {
     if (!settings.toast) {
       return;
     }
- 
+
     ensureStyle(
       ID.uiStyle,
       getUiCss()
     );
- 
+
     const parent =
       getBody() ||
       getRoot();
- 
+
     if (!parent) {
       return;
     }
- 
+
     let toast =
       document.getElementById(
         ID.toast
       );
- 
+
     if (!toast) {
       toast =
         document.createElement('div');
- 
+
       toast.id = ID.toast;
- 
+
       toast.setAttribute(
         'role',
         'status'
       );
- 
+
       toast.setAttribute(
         'aria-live',
         'polite'
       );
- 
+
       parent.appendChild(toast);
     }
- 
+
     toast.textContent =
       String(
         message ||
         'UltraWide updated'
       );
- 
+
     if (runtime.toastTimer) {
       clearTimeout(
         runtime.toastTimer
       );
     }
- 
+
     runtime.toastTimer =
       window.setTimeout(() => {
         runtime.toastTimer = 0;
       removeById(ID.toast);
     }, settings.toastMs);
   }
- 
+
   function syncDebugOverlay() {
     if (!settings.debugOverlay || !runtime.started) {
       removeById(ID.debugOverlay);
       return;
     }
- 
+
     ensureStyle(
       ID.uiStyle,
       getUiCss()
     );
- 
+
     const parent =
       getBody() ||
       getRoot();
- 
+
     if (!parent) {
       return;
     }
- 
+
     let overlay =
       document.getElementById(
         ID.debugOverlay
       );
- 
+
     if (!overlay) {
       overlay =
         document.createElement('div');
- 
+
       overlay.id = ID.debugOverlay;
- 
+
       overlay.setAttribute(
         'aria-hidden',
         'true'
       );
- 
+
       parent.appendChild(overlay);
     }
- 
+
     const compatibility =
       runtime.lastCompatibility ||
       evaluateCompatibility();
- 
+
     const rows = [
       `UltraWide ${VERSION}`,
       `wide=${isWideActive() ? 'active' : 'inactive'} cap=${settings.cap}`,
@@ -7342,7 +7612,7 @@ ${safeMediaCss}
       `compat=${compatibility.status} strategy=${compatibility.strategy}`,
       `safe=${runtime.safeFallbackActive ? runtime.safeFallbackReason || 'active' : 'off'}`
     ];
- 
+
     // Text-only DOM updates work under Trusted Types enforcement and avoid
     // parsing runtime diagnostics as HTML.
     const fragment = document.createDocumentFragment();
@@ -7359,7 +7629,7 @@ ${safeMediaCss}
     });
     overlay.replaceChildren(fragment);
   }
- 
+
   function downloadTextFile(filename, content, mimeType = 'text/plain') {
     try {
       const blob =
@@ -7367,25 +7637,25 @@ ${safeMediaCss}
           [String(content || '')],
           { type: `${mimeType};charset=utf-8` }
         );
- 
+
       const url =
         URL.createObjectURL(blob);
- 
+
       const anchor =
         document.createElement('a');
- 
+
       anchor.href = url;
       anchor.download = filename;
       anchor.style.display = 'none';
- 
+
       (getBody() || getRoot())?.appendChild(anchor);
       anchor.click();
       anchor.remove();
- 
+
       window.setTimeout(() => {
         URL.revokeObjectURL(url);
       }, 0);
- 
+
       return true;
     } catch (error) {
       runtime.lastError = String(
@@ -7394,7 +7664,7 @@ ${safeMediaCss}
       return false;
     }
   }
- 
+
   function getStatusText() {
     return [
       `UltraWide ${
@@ -7427,12 +7697,12 @@ ${safeMediaCss}
       `cap ${settings.cap}`
     ].join(' | ');
   }
- 
+
   function getAdaptiveWatchdogInterval() {
     if (shouldPauseWork()) {
       return settings.lowPowerMode ? 30000 : CONFIG.enforcementStableIntervalMs;
     }
- 
+
     const now = Date.now();
     const recentActivity = Math.max(
       runtime.lastMutationAt || 0,
@@ -7440,7 +7710,7 @@ ${safeMediaCss}
       runtime.lastPaneResizeAt || 0,
       runtime.lastEnforcementRepairAt || 0
     );
- 
+
     if (
       runtime.invariantFailureStreak > 0 ||
       runtime.enforcementRetryCount > 0 ||
@@ -7448,39 +7718,39 @@ ${safeMediaCss}
     ) {
       return settings.lowPowerMode ? 1500 : CONFIG.enforcementUnstableIntervalMs;
     }
- 
+
     if (now - recentActivity < 5000) {
       return settings.lowPowerMode ? 4500 : CONFIG.enforcementActiveIntervalMs;
     }
- 
+
     if (runtime.stableWatchdogPasses >= 8) {
       return settings.lowPowerMode ? 30000 : CONFIG.enforcementStableIntervalMs;
     }
- 
+
     return settings.lowPowerMode ? 15000 : CONFIG.enforcementNormalIntervalMs;
   }
- 
+
   function scheduleEnforcementWatchdog(delay = null) {
     if (runtime.enforcementTimer) {
       clearTimeout(runtime.enforcementTimer);
       runtime.enforcementTimer = 0;
     }
- 
+
     if (!runtime.started) {
       return;
     }
- 
+
     const interval = Number.isFinite(delay)
       ? delay
       : getAdaptiveWatchdogInterval();
- 
+
     const epoch =
       currentRuntimeEpoch();
- 
+
     runtime.watchdogIntervalMs = interval;
     runtime.enforcementTimer = window.setTimeout(() => {
       runtime.enforcementTimer = 0;
- 
+
       if (
         rejectStaleCallback(
           epoch,
@@ -7489,15 +7759,15 @@ ${safeMediaCss}
       ) {
         return;
       }
- 
+
       const startedAt = nowMs();
- 
+
       try {
         const repaired =
           enforceRuntimeIntegrity(
             'watchdog'
           );
- 
+
         runtime.stableWatchdogPasses =
           repaired
             ? 0
@@ -7528,7 +7798,7 @@ ${safeMediaCss}
             nowMs() - startedAt
           )
         );
- 
+
         if (
           isCurrentRuntimeEpoch(
             epoch
@@ -7539,33 +7809,33 @@ ${safeMediaCss}
       }
     }, Math.max(250, interval));
   }
- 
+
   function restartTimers() {
     if (!runtime.started) {
       return;
     }
- 
+
     if (runtime.repairTimer) {
       clearInterval(
         runtime.repairTimer
       );
     }
- 
+
     if (runtime.routeTimer) {
       clearInterval(
         runtime.routeTimer
       );
     }
- 
+
     if (runtime.enforcementTimer) {
       clearTimeout(
         runtime.enforcementTimer
       );
     }
- 
+
     const epoch =
       currentRuntimeEpoch();
- 
+
     runtime.repairTimer =
       window.setInterval(() => {
         if (
@@ -7576,11 +7846,11 @@ ${safeMediaCss}
         ) {
           return;
         }
- 
+
         if (shouldPauseWork()) {
           return;
         }
- 
+
         try {
           repair();
         } catch (error) {
@@ -7589,7 +7859,7 @@ ${safeMediaCss}
               error?.message ||
               error
             );
- 
+
           console.error(
             '[UltraWide] Repair failed:',
             error
@@ -7598,7 +7868,7 @@ ${safeMediaCss}
       }, settings.lowPowerMode
         ? Math.max(settings.repairIntervalMs, CONFIG.lowPowerRepairIntervalMs)
         : settings.repairIntervalMs);
- 
+
     runtime.routeTimer =
       window.setInterval(() => {
         if (
@@ -7609,20 +7879,20 @@ ${safeMediaCss}
         ) {
           return;
         }
- 
+
         if (!shouldPauseWork()) {
           checkRoute();
         }
       }, settings.lowPowerMode
         ? Math.max(settings.routePollMs, CONFIG.lowPowerRoutePollMs)
         : settings.routePollMs);
- 
+
     scheduleEnforcementWatchdog(settings.lowPowerMode
       ? 4500
       : CONFIG.enforcementActiveIntervalMs);
     startClipAlignmentTimer();
   }
- 
+
   function commit(
     message,
     restartRuntimeTimers = false
@@ -7631,22 +7901,22 @@ ${safeMediaCss}
     invalidateCssCache();
     applyStyles();
     syncSettingsModal();
- 
+
     if (restartRuntimeTimers) {
       restartTimers();
     }
- 
+
     if (runtime.started) {
       refreshMenus();
     }
- 
+
     showToast(
       saved
         ? (message || getStatusText())
         : 'UltraWide updated, but settings could not be saved'
     );
   }
- 
+
   function setOptions(patch) {
     if (
       !patch ||
@@ -7655,7 +7925,7 @@ ${safeMediaCss}
     ) {
       return false;
     }
- 
+
     if (
       Object.prototype
         .hasOwnProperty.call(
@@ -7670,16 +7940,16 @@ ${safeMediaCss}
         `Invalid cap: ${String(patch.cap)}`
       );
     }
- 
+
     const previousLowPower =
       settings.lowPowerMode;
- 
+
     const previousRepair =
       settings.repairIntervalMs;
- 
+
     const previousRoute =
       settings.routePollMs;
- 
+
     Object.assign(
       settings,
       normalizeSettings({
@@ -7687,53 +7957,53 @@ ${safeMediaCss}
         ...patch
       })
     );
- 
+
     const timersChanged =
       previousLowPower !== settings.lowPowerMode ||
       previousRepair !==
         settings.repairIntervalMs ||
       previousRoute !==
         settings.routePollMs;
- 
+
     if (previousLowPower !== settings.lowPowerMode) {
       runtime.lastCapabilitiesAt = 0;
       runtime.lastSelectorHealthAt = 0;
     }
- 
+
     commit(
       getStatusText(),
       timersChanged
     );
- 
+
     return true;
   }
- 
+
   function resetSettings() {
     Object.assign(
       settings,
       DEFAULTS
     );
- 
+
     commit(
       'UltraWide settings reset',
       true
     );
   }
- 
+
   function cycleCap() {
     const index =
       CAPS.indexOf(settings.cap);
- 
+
     settings.cap =
       CAPS[
         (index + 1) % CAPS.length
       ] || 'none';
- 
+
     commit(
       `UltraWide cap: ${settings.cap}`
     );
   }
- 
+
   function checkRoute() {
     if (
       runtime.href ===
@@ -7741,7 +8011,7 @@ ${safeMediaCss}
     ) {
       return false;
     }
- 
+
     runtime.href =
       location.href;
     runtime.lastCapabilitiesAt = 0;
@@ -7751,7 +8021,7 @@ ${safeMediaCss}
     pushDebugEvent('route-change', {
       href: runtime.href
     });
- 
+
     requestRepair(
       'route-change',
       ALL_DIRTY_REGIONS,
@@ -7759,21 +8029,21 @@ ${safeMediaCss}
     );
     return true;
   }
- 
+
   function scheduleRouteCheck() {
     if (runtime.routeDelayTimer) {
       clearTimeout(
         runtime.routeDelayTimer
       );
     }
- 
+
     const epoch =
       currentRuntimeEpoch();
- 
+
     runtime.routeDelayTimer =
       window.setTimeout(() => {
         runtime.routeDelayTimer = 0;
- 
+
         if (
           rejectStaleCallback(
             epoch,
@@ -7782,11 +8052,11 @@ ${safeMediaCss}
         ) {
           return;
         }
- 
+
         checkRoute();
       }, CONFIG.routeDelayMs);
   }
- 
+
   function wrapHistoryMethod(original) {
     return function wrappedHistoryMethod(
       ...args
@@ -7796,20 +8066,20 @@ ${safeMediaCss}
           this,
           args
         );
- 
+
       scheduleRouteCheck();
       return result;
     };
   }
- 
+
   function installHistoryHooks() {
     try {
       runtime.originalPushState ||=
         history.pushState;
- 
+
       runtime.originalReplaceState ||=
         history.replaceState;
- 
+
       if (
         history.pushState ===
         runtime.originalPushState
@@ -7818,11 +8088,11 @@ ${safeMediaCss}
           wrapHistoryMethod(
             runtime.originalPushState
           );
- 
+
         history.pushState =
           runtime.wrappedPushState;
       }
- 
+
       if (
         history.replaceState ===
         runtime.originalReplaceState
@@ -7831,13 +8101,13 @@ ${safeMediaCss}
           wrapHistoryMethod(
             runtime.originalReplaceState
           );
- 
+
         history.replaceState =
           runtime.wrappedReplaceState;
       }
     } catch (_) {}
   }
- 
+
   function restoreHistoryHooks() {
     try {
       if (
@@ -7849,7 +8119,7 @@ ${safeMediaCss}
         history.pushState =
           runtime.originalPushState;
       }
- 
+
       if (
         runtime.originalReplaceState &&
         runtime.wrappedReplaceState &&
@@ -7860,16 +8130,16 @@ ${safeMediaCss}
           runtime.originalReplaceState;
       }
     } catch (_) {}
- 
+
     runtime.wrappedPushState = null;
     runtime.wrappedReplaceState = null;
   }
- 
+
   function nodeMayRequireScan(node) {
     if (!isElement(node)) {
       return false;
     }
- 
+
     if (
       node.id === ID.style ||
       node.id === ID.uiStyle ||
@@ -7878,12 +8148,12 @@ ${safeMediaCss}
     ) {
       return false;
     }
- 
+
     try {
       if (node.matches(SCAN_TRIGGER_SELECTOR)) {
         return true;
       }
- 
+
       return Boolean(
         node.querySelector(
           SCAN_TRIGGER_SELECTOR
@@ -7893,12 +8163,12 @@ ${safeMediaCss}
       return false;
     }
   }
- 
+
   function isWithinManagedLayout(element) {
     if (!isElement(element)) {
       return false;
     }
- 
+
     try {
       return Boolean(
         element.closest(
@@ -7909,20 +8179,20 @@ ${safeMediaCss}
       return false;
     }
   }
- 
+
   function mutationNeedsScan(records) {
     if (!records || records.length === 0) {
       return false;
     }
- 
+
     const recordLimit = Math.min(
       records.length,
       CONFIG.maxMutationRecords
     );
- 
+
     for (let recordIndex = 0; recordIndex < recordLimit; recordIndex += 1) {
       const record = records[recordIndex];
- 
+
       if (
         record.type === 'attributes' &&
         (
@@ -7932,7 +8202,7 @@ ${safeMediaCss}
       ) {
         return true;
       }
- 
+
       const added = record.addedNodes;
       const removed = record.removedNodes;
       const addedLimit = Math.min(
@@ -7943,19 +8213,19 @@ ${safeMediaCss}
         removed?.length || 0,
         CONFIG.maxMutationNodes
       );
- 
+
       for (let index = 0; index < addedLimit; index += 1) {
         if (nodeMayRequireScan(added[index])) {
           return true;
         }
       }
- 
+
       for (let index = 0; index < removedLimit; index += 1) {
         if (nodeMayRequireScan(removed[index])) {
           return true;
         }
       }
- 
+
       if (
         (added?.length || 0) > CONFIG.maxMutationNodes ||
         (removed?.length || 0) > CONFIG.maxMutationNodes
@@ -7963,27 +8233,27 @@ ${safeMediaCss}
         return true;
       }
     }
- 
+
     return records.length > CONFIG.maxMutationRecords;
   }
- 
+
   function isManagedContentOnlyMutationBatch(records) {
     if (!settings.lowPowerMode || !records?.length) {
       return false;
     }
- 
+
     for (const record of records) {
       if (record.type !== 'childList' || !isElement(record.target)) {
         return false;
       }
- 
+
       // Text and presentation changes in a managed turn do not affect
       // which structural nodes need width markers.
       const turn = record.target.closest(`[${ATTR.turn}]`);
       if (!turn || record.target.closest(`[${ATTR.planNotice}]`)) {
         return false;
       }
- 
+
       const added = record.addedNodes || [];
       const removed = record.removedNodes || [];
       if (
@@ -7992,17 +8262,17 @@ ${safeMediaCss}
       ) {
         return false;
       }
- 
+
       for (const node of [...added, ...removed]) {
         if (nodeMayRequireScan(node)) {
           return false;
         }
       }
     }
- 
+
     return true;
   }
- 
+
   function mutationMayContainPlanNotice(record) {
     const candidates = [record.target, ...(record.addedNodes || [])];
     return candidates.some((node) =>
@@ -8011,19 +8281,19 @@ ${safeMediaCss}
       hasFreePlanNoticeText(node)
     );
   }
- 
+
   function classifyMutationDirtyRegions(records) {
     const dirty = new Set();
- 
+
     if (!records || records.length === 0) {
       return dirty;
     }
- 
+
     const inspectNode = (node) => {
       if (!isElement(node)) {
         return;
       }
- 
+
       try {
         if (
           node.matches(SELECTOR.preferredTurns) ||
@@ -8033,7 +8303,7 @@ ${safeMediaCss}
         ) {
           dirty.add(DIRTY.conversation);
         }
- 
+
         if (
           node.matches(SELECTOR.composerInput) ||
           node.matches(SELECTOR.composerShell) ||
@@ -8042,14 +8312,14 @@ ${safeMediaCss}
         ) {
           dirty.add(DIRTY.composer);
         }
- 
+
         if (
           node.matches(SELECTOR.splitViewIndicators) ||
           node.querySelector(SELECTOR.splitViewIndicators)
         ) {
           dirty.add(DIRTY.split);
         }
- 
+
         if (
           node.matches(SELECTOR.structuralRoots) ||
           node.querySelector(SELECTOR.structuralRoots)
@@ -8060,17 +8330,18 @@ ${safeMediaCss}
         }
       } catch (_) {}
     };
- 
+
     const limit = Math.min(
       records.length,
       CONFIG.maxMutationRecords
     );
- 
+
     for (let index = 0; index < limit; index += 1) {
       const record = records[index];
       if (record.type === 'attributes') {
         // React and other extensions may remove an existing managed marker.
         // Schedule the relevant region even after the selector stops matching.
+        if (record.attributeName === ATTR.pane) dirty.add(DIRTY.root);
         if ([ATTR.conversationRoot, ATTR.conversationPath, ATTR.turn, ATTR.turnPath]
           .includes(record.attributeName)) dirty.add(DIRTY.conversation);
         if ([ATTR.composer, ATTR.composerPath]
@@ -8079,7 +8350,7 @@ ${safeMediaCss}
           .includes(record.attributeName)) dirty.add(DIRTY.notice);
         inspectNode(record.target);
       }
- 
+
       if (
         record.type === 'childList' &&
         isElement(record.target)
@@ -8098,15 +8369,15 @@ ${safeMediaCss}
           }
         } catch (_) {}
       }
- 
+
       const added = Array.from(record.addedNodes || [])
         .slice(0, CONFIG.maxMutationNodes);
       const removed = Array.from(record.removedNodes || [])
         .slice(0, CONFIG.maxMutationNodes);
- 
+
       added.forEach(inspectNode);
       removed.forEach(inspectNode);
- 
+
       if (
         (record.addedNodes?.length || 0) > CONFIG.maxMutationNodes ||
         (record.removedNodes?.length || 0) > CONFIG.maxMutationNodes
@@ -8116,7 +8387,7 @@ ${safeMediaCss}
         );
       }
     }
- 
+
     if (
       records.length > CONFIG.maxMutationRecords
     ) {
@@ -8124,7 +8395,7 @@ ${safeMediaCss}
         dirty.add(region)
       );
     }
- 
+
     if (
       dirty.size === 0 &&
       mutationNeedsScan(records)
@@ -8133,18 +8404,18 @@ ${safeMediaCss}
       dirty.add(DIRTY.composer);
       dirty.add(DIRTY.notice);
     }
- 
+
     return dirty;
   }
- 
+
   function onBodyMutations(records) {
     runtime.mutationBatchCount += 1;
     runtime.lastMutationAt = Date.now();
- 
+
     if (!settings.enabled) {
       return;
     }
- 
+
     const attribution = attributeMutations(records || []);
     if (attribution.source === 'ultrawide') {
       pushDebugEvent('mutation-attributed', {
@@ -8154,25 +8425,39 @@ ${safeMediaCss}
       });
       return;
     }
- 
+
     const relevantRecords = attribution.externalRecords.length > 0
       ? attribution.externalRecords
       : records;
- 
+
+    // Mention widgets may appear after the input event. Restrict extra
+    // audits to DOM changes inside the active composer, never streamed turns.
+    if (relevantRecords.some((record) => record.type === 'childList' && (
+        (isElement(record.target) && record.target.closest(
+          '#thread-bottom-container,form[data-type="unified-composer"]')) ||
+        [...Array.from(record.addedNodes || []),
+          ...Array.from(record.removedNodes || [])].some(node => isElement(node) && (
+          node.matches('.composer-home-top-menu') ||
+          node.querySelector('.composer-home-top-menu')
+        ))
+      ))) {
+      scheduleComposerScrollGuardAudit();
+    }
+
     // A Work layout offset can change without resizing the main pane.
     // Rate-limit readback during streaming/content mutations.
     if (Date.now() - runtime.clipAlignmentLastMutationCheck >= 250) {
       runtime.clipAlignmentLastMutationCheck = Date.now();
       scheduleClipAlignment();
     }
- 
+
     if (isManagedContentOnlyMutationBatch(relevantRecords)) {
       runtime.skippedContentMutationBatches += 1;
       return;
     }
- 
+
     const dirty = classifyMutationDirtyRegions(relevantRecords);
- 
+
     if (dirty.size > 0) {
       requestRepair(
         attribution.source === 'mixed' ? 'mutation-mixed' : 'mutation-external',
@@ -8180,48 +8465,48 @@ ${safeMediaCss}
       );
     }
   }
- 
+
   function onRootMutations(records = []) {
     const attribution = attributeMutations(records || []);
     if (attribution.source === 'ultrawide') {
       return;
     }
- 
+
     if (!runtime.started) {
       return;
     }
- 
+
     if (!settings.enabled) {
       removeMainStyle();
       clearManagedMarkers();
       clearRootState();
       return;
     }
- 
+
     const currentRoot = getRoot();
- 
+
     if (
       currentRoot !== runtime.observedRoot
     ) {
       attachObservers();
     }
- 
+
     if (!rootStateMatches()) {
       setRootState();
- 
+
       requestRepair(
         'root-state-repair',
         [DIRTY.root],
         true
       );
     }
- 
+
     if (
       getHead() !== runtime.observedHead ||
       getBody() !== runtime.observedBody
     ) {
       attachObservers();
- 
+
       requestRepair(
         'document-lifecycle-repair',
         ALL_DIRTY_REGIONS,
@@ -8229,7 +8514,7 @@ ${safeMediaCss}
       );
     }
   }
- 
+
   function headMutationTouchesOwnedStyle(record) {
     const check = (node) => {
       const element = node?.nodeType === 3 ? node.parentElement : node;
@@ -8244,7 +8529,7 @@ ${safeMediaCss}
         return false;
       }
     };
- 
+
     if (check(record.target)) return true;
     for (const node of record.addedNodes || []) {
       if (check(node)) return true;
@@ -8254,20 +8539,20 @@ ${safeMediaCss}
     }
     return false;
   }
- 
+
   function onHeadMutations(records = []) {
     const attribution = attributeMutations(records || []);
     if (attribution.source === 'ultrawide') {
       return;
     }
- 
+
     if (
       settings.lowPowerMode &&
       !records.some(headMutationTouchesOwnedStyle)
     ) {
       return;
     }
- 
+
     if (
       getStyleText(ID.uiStyle) !== getUiCss()
     ) {
@@ -8276,7 +8561,7 @@ ${safeMediaCss}
         getUiCss()
       );
     }
- 
+
     if (
       settings.enabled &&
       getStyleText(ID.style) !== getMainCss()
@@ -8285,7 +8570,7 @@ ${safeMediaCss}
         ID.style,
         getMainCss()
       );
- 
+
       requestRepair(
         'head-style-repair',
         [DIRTY.root],
@@ -8293,22 +8578,22 @@ ${safeMediaCss}
       );
     }
   }
- 
+
   function attachObservers() {
     const root = getRoot();
     const head = getHead();
     const body = getBody();
- 
+
     if (
       root &&
       root !== runtime.observedRoot
     ) {
       runtime.rootObserver
         ?.disconnect();
- 
+
       const rootEpoch =
         currentRuntimeEpoch();
- 
+
       runtime.rootObserver =
         new MutationObserver(
           guardRuntimeEpoch(
@@ -8317,7 +8602,7 @@ ${safeMediaCss}
             rootEpoch
           )
         );
- 
+
       runtime.rootObserver.observe(
         root,
         {
@@ -8333,20 +8618,20 @@ ${safeMediaCss}
           ]
         }
       );
- 
+
       runtime.observedRoot = root;
     }
- 
+
     if (
       head &&
       head !== runtime.observedHead
     ) {
       runtime.headObserver
         ?.disconnect();
- 
+
       const headEpoch =
         currentRuntimeEpoch();
- 
+
       runtime.headObserver =
         new MutationObserver(
           guardRuntimeEpoch(
@@ -8355,7 +8640,7 @@ ${safeMediaCss}
             headEpoch
           )
         );
- 
+
       runtime.headObserver.observe(
         head,
         {
@@ -8366,20 +8651,20 @@ ${safeMediaCss}
           attributeFilter: ['data-version']
         }
       );
- 
+
       runtime.observedHead = head;
     }
- 
+
     if (
       body &&
       body !== runtime.observedBody
     ) {
       runtime.bodyObserver
         ?.disconnect();
- 
+
       const bodyEpoch =
         currentRuntimeEpoch();
- 
+
       runtime.bodyObserver =
         new MutationObserver(
           guardRuntimeEpoch(
@@ -8388,7 +8673,7 @@ ${safeMediaCss}
             bodyEpoch
           )
         );
- 
+
       runtime.bodyObserver.observe(
         body,
         {
@@ -8399,35 +8684,35 @@ ${safeMediaCss}
             CONFIG.mutationAttributeFilter
         }
       );
- 
+
       runtime.observedBody = body;
       runtime.lastCapabilitiesAt = 0;
     }
- 
+
     return Boolean(
       runtime.observedRoot &&
       runtime.observedHead &&
       runtime.observedBody
     );
   }
- 
+
   function installObservers() {
     if (attachObservers()) {
       return;
     }
- 
+
     const root = getRoot();
- 
+
     if (!root) {
       return;
     }
- 
+
     runtime.bootstrapObserver
       ?.disconnect();
- 
+
     const bootstrapEpoch =
       currentRuntimeEpoch();
- 
+
     runtime.bootstrapObserver =
       new MutationObserver(
         guardRuntimeEpoch(
@@ -8435,13 +8720,13 @@ ${safeMediaCss}
             if (!attachObservers()) {
               return;
             }
- 
+
             runtime.bootstrapObserver
               ?.disconnect();
- 
+
             runtime.bootstrapObserver =
               null;
- 
+
             requestRepair(
               'observer-bootstrap',
               ALL_DIRTY_REGIONS,
@@ -8452,7 +8737,7 @@ ${safeMediaCss}
           bootstrapEpoch
         )
       );
- 
+
     runtime.bootstrapObserver.observe(
       root,
       {
@@ -8461,74 +8746,74 @@ ${safeMediaCss}
       }
     );
   }
- 
+
   function disconnectObservers() {
     runtime.bodyObserver
       ?.disconnect();
- 
+
     runtime.headObserver
       ?.disconnect();
- 
+
     runtime.rootObserver
       ?.disconnect();
- 
+
     runtime.bootstrapObserver
       ?.disconnect();
- 
+
     runtime.bodyObserver = null;
     runtime.headObserver = null;
     runtime.rootObserver = null;
     runtime.bootstrapObserver = null;
- 
+
     runtime.observedBody = null;
     runtime.observedHead = null;
     runtime.observedRoot = null;
- 
+
     disconnectPaneResizeObserver();
   }
- 
+
   function repair() {
     if (!runtime.started) {
       return;
     }
- 
+
     attachObservers();
     attachPaneResizeObserver();
- 
+
     if (!settings.enabled) {
       removeMainStyle();
       clearRootState();
       clearManagedMarkers();
       return;
     }
- 
+
     ensureStyle(
       ID.style,
       getMainCss()
     );
- 
+
     ensureStyle(
       ID.uiStyle,
       getUiCss()
     );
- 
+
     checkRoute();
- 
+
     if (shouldPauseWork()) {
       runtime.deferredScan = true;
       return;
     }
- 
+
     const conversationMissing =
       runtime.lastTurnCount > 0 &&
       !hasConnectedMarker(ATTR.turn);
- 
+
     const composerMissing =
       settings.widenComposer &&
       !hasConnectedMarker(ATTR.composer);
- 
+
     const dirty = [];
- 
+
     if (hasDisconnectedMarkers()) {
       dirty.push(
         DIRTY.conversation,
@@ -8536,39 +8821,39 @@ ${safeMediaCss}
         DIRTY.notice
       );
     }
- 
+
     if (conversationMissing) {
       dirty.push(DIRTY.conversation);
     }
- 
+
     if (composerMissing) {
       dirty.push(DIRTY.composer);
     }
- 
+
     if (dirty.length > 0) {
       requestRepair(
         'periodic-repair',
         [...new Set(dirty)]
       );
     }
- 
+
     processInvariantResult(
       evaluateLayoutInvariants()
     );
     setRootState();
     syncDebugOverlay();
   }
- 
+
   function isTypingTarget(target) {
     if (!target) {
       return false;
     }
- 
+
     const element =
       target instanceof Element
         ? target
         : target.parentElement;
- 
+
     return Boolean(
       element?.closest(
         [
@@ -8581,7 +8866,7 @@ ${safeMediaCss}
       )
     );
   }
- 
+
   function exactShortcut(
     event,
     key
@@ -8596,7 +8881,7 @@ ${safeMediaCss}
       ).toLowerCase() === key
     );
   }
- 
+
   function onKeydown(event) {
     if (
       !event ||
@@ -8605,13 +8890,13 @@ ${safeMediaCss}
     ) {
       return;
     }
- 
+
     if (exactShortcut(event, 'o')) {
       event.preventDefault();
- 
+
       settings.enabled =
         !settings.enabled;
- 
+
       commit(
         `UltraWide script: ${
           settings.enabled
@@ -8619,16 +8904,16 @@ ${safeMediaCss}
             : 'off'
         }`
       );
- 
+
       return;
     }
- 
+
     if (exactShortcut(event, 'u')) {
       event.preventDefault();
- 
+
       settings.wide =
         !settings.wide;
- 
+
       commit(
         `UltraWide mode: ${
           settings.wide
@@ -8636,16 +8921,16 @@ ${safeMediaCss}
             : 'off'
         }`
       );
- 
+
       return;
     }
- 
+
     if (exactShortcut(event, 'l')) {
       event.preventDefault();
- 
+
       settings.left =
         !settings.left;
- 
+
       commit(
         `Left alignment: ${
           settings.left
@@ -8653,22 +8938,22 @@ ${safeMediaCss}
             : 'off'
         }`
       );
- 
+
       return;
     }
- 
+
     if (exactShortcut(event, 'm')) {
       event.preventDefault();
       cycleCap();
       return;
     }
- 
+
     if (exactShortcut(event, 'a')) {
       event.preventDefault();
- 
+
       settings.auto =
         !settings.auto;
- 
+
       commit(
         `Adaptive mode: ${
           settings.auto
@@ -8676,16 +8961,16 @@ ${safeMediaCss}
             : 'off'
         }`
       );
- 
+
       return;
     }
- 
+
     if (exactShortcut(event, 'c')) {
       event.preventDefault();
- 
+
       settings.canvasSafeMode =
         !settings.canvasSafeMode;
- 
+
       commit(
         `Split-view safe mode: ${
           settings.canvasSafeMode
@@ -8693,22 +8978,22 @@ ${safeMediaCss}
             : 'off'
         }`
       );
- 
+
       return;
     }
- 
+
     if (exactShortcut(event, 's')) {
       event.preventDefault();
       openSettings();
       return;
     }
- 
+
     if (exactShortcut(event, 'r')) {
       event.preventDefault();
       resetSettings();
     }
   }
- 
+
   function onEnvironmentChange() {
     attachPaneResizeObserver();
     measureEffectivePane();
@@ -8719,17 +9004,17 @@ ${safeMediaCss}
       [DIRTY.split, DIRTY.root]
     );
   }
- 
+
   function bindEvents() {
     runtime.eventController
       ?.abort();
- 
+
     runtime.eventController =
       new AbortController();
- 
+
     const signal =
       runtime.eventController.signal;
- 
+
     window.addEventListener(
       'keydown',
       onKeydown,
@@ -8738,7 +9023,7 @@ ${safeMediaCss}
         signal
       }
     );
- 
+
     window.addEventListener(
       'resize',
       onEnvironmentChange,
@@ -8747,7 +9032,7 @@ ${safeMediaCss}
         signal
       }
     );
- 
+
     window.addEventListener(
       'orientationchange',
       onEnvironmentChange,
@@ -8756,7 +9041,7 @@ ${safeMediaCss}
         signal
       }
     );
- 
+
     window.addEventListener(
       'pageshow',
       onEnvironmentChange,
@@ -8765,7 +9050,7 @@ ${safeMediaCss}
         signal
       }
     );
- 
+
     window.addEventListener(
       'focus',
       onEnvironmentChange,
@@ -8774,7 +9059,7 @@ ${safeMediaCss}
         signal
       }
     );
- 
+
     window.addEventListener(
       'popstate',
       scheduleRouteCheck,
@@ -8783,7 +9068,7 @@ ${safeMediaCss}
         signal
       }
     );
- 
+
     window.addEventListener(
       'hashchange',
       scheduleRouteCheck,
@@ -8792,7 +9077,7 @@ ${safeMediaCss}
         signal
       }
     );
- 
+
     try {
       if (
         window.navigation &&
@@ -8808,7 +9093,14 @@ ${safeMediaCss}
         );
       }
     } catch (_) {}
- 
+
+    document.addEventListener('input', onComposerActivity,
+      { capture: true, passive: true, signal });
+    document.addEventListener('focusin', onComposerActivity,
+      { capture: true, passive: true, signal });
+    document.addEventListener(COMPOSER_DEBUG_REQUEST, onComposerDebugRequest,
+      { signal });
+
     document.addEventListener(
       'visibilitychange',
       () => {
@@ -8825,7 +9117,7 @@ ${safeMediaCss}
         signal
       }
     );
- 
+
     // At document-start, html/head/body may not exist yet. The initial
     // observer bootstrap cannot observe a missing document root.
     if (document.readyState === 'loading') {
@@ -8839,15 +9131,15 @@ ${safeMediaCss}
       );
     }
   }
- 
+
   function unbindEvents() {
     runtime.eventController
       ?.abort();
- 
+
     runtime.eventController =
       null;
   }
- 
+
   function unregisterMenus() {
     for (const commandId of runtime.menuCommandIds.values()) {
       try {
@@ -8861,11 +9153,11 @@ ${safeMediaCss}
         }
       } catch (_) {}
     }
- 
+
     runtime.menuCommandIds.clear();
     runtime.menusRegistered = false;
   }
- 
+
   function registerMenu(
     key,
     label,
@@ -8879,25 +9171,25 @@ ${safeMediaCss}
       ) {
         return null;
       }
- 
+
       const commandId =
         GM_registerMenuCommand(
           label,
           callback,
           accessKey
         );
- 
+
       runtime.menuCommandIds.set(
         key,
         commandId
       );
- 
+
       return commandId;
     } catch (_) {
       return null;
     }
   }
- 
+
   function menuToggleLabel(
     label,
     active,
@@ -8905,12 +9197,12 @@ ${safeMediaCss}
   ) {
     const marker =
       active ? '✓' : '○';
- 
+
     return `${marker}  ${label}${
       detail ? ` · ${detail}` : ''
     }`;
   }
- 
+
   function menuValueLabel(
     icon,
     label,
@@ -8921,7 +9213,7 @@ ${safeMediaCss}
       detail ? ` · ${detail}` : ''
     }`;
   }
- 
+
   function toggleSetting(
     key,
     label,
@@ -8929,7 +9221,7 @@ ${safeMediaCss}
   ) {
     settings[key] =
       !settings[key];
- 
+
     commit(
       `${label}: ${
         settings[key]
@@ -8939,26 +9231,26 @@ ${safeMediaCss}
       Boolean(options.restartTimers)
     );
   }
- 
+
   function refreshMenus() {
     unregisterMenus();
     registerMenus();
   }
- 
+
   function registerMenus() {
     if (runtime.menusRegistered) {
       return;
     }
- 
+
     runtime.menusRegistered = true;
- 
+
     registerMenu(
       'settings',
       `⚙  Settings · v${VERSION}`,
       openSettings,
       's'
     );
- 
+
     registerMenu(
       'enabled',
       menuToggleLabel(
@@ -8976,7 +9268,7 @@ ${safeMediaCss}
       },
       'o'
     );
- 
+
     registerMenu(
       'wide',
       menuToggleLabel(
@@ -8994,7 +9286,7 @@ ${safeMediaCss}
       },
       'u'
     );
- 
+
     registerMenu(
       'left',
       menuToggleLabel(
@@ -9009,7 +9301,7 @@ ${safeMediaCss}
       },
       'l'
     );
- 
+
     registerMenu(
       'cap',
       menuValueLabel(
@@ -9023,7 +9315,7 @@ ${safeMediaCss}
       cycleCap,
       'm'
     );
- 
+
     registerMenu(
       'auto',
       menuToggleLabel(
@@ -9039,7 +9331,7 @@ ${safeMediaCss}
       },
       'a'
     );
- 
+
     registerMenu(
       'composer',
       menuToggleLabel(
@@ -9053,7 +9345,7 @@ ${safeMediaCss}
         );
       }
     );
- 
+
     registerMenu(
       'canvas',
       menuToggleLabel(
@@ -9066,12 +9358,12 @@ ${safeMediaCss}
       () => {
         toggleSetting(
           'canvasSafeMode',
-          'Split-view safe mode'
+          'Adjust when panels are open'
         );
       },
       'c'
     );
- 
+
     registerMenu(
       'media',
       menuToggleLabel(
@@ -9081,11 +9373,11 @@ ${safeMediaCss}
       () => {
         toggleSetting(
           'safeMedia',
-          'Safe media constraints'
+          'Keep images within view'
         );
       }
     );
- 
+
     registerMenu(
       'low-power',
       menuToggleLabel(
@@ -9097,7 +9389,7 @@ ${safeMediaCss}
         toggleSetting('lowPowerMode', 'Low-power mode');
       }
     );
- 
+
     registerMenu(
       'pause-hidden',
       menuToggleLabel(
@@ -9114,7 +9406,7 @@ ${safeMediaCss}
         );
       }
     );
- 
+
     registerMenu(
       'telemetry',
       menuToggleLabel(
@@ -9129,7 +9421,7 @@ ${safeMediaCss}
         );
       }
     );
- 
+
     registerMenu(
       'debug-overlay',
       menuToggleLabel(
@@ -9146,7 +9438,7 @@ ${safeMediaCss}
         );
       }
     );
- 
+
     registerMenu(
       'scan',
       menuValueLabel(
@@ -9165,7 +9457,7 @@ ${safeMediaCss}
         );
       }
     );
- 
+
     registerMenu(
       'diagnostics',
       '⎘  Copy diagnostics',
@@ -9173,19 +9465,19 @@ ${safeMediaCss}
         void copyDiagnostics();
       }
     );
- 
+
     registerMenu(
       'download-diagnostics',
       '⇩  Download diagnostics',
       downloadDiagnostics
     );
- 
+
     registerMenu(
       'download-bug-report',
       '⇩  Download bug report',
       downloadBugReport
     );
- 
+
     registerMenu(
       'reset',
       '↺  Reset to defaults',
@@ -9201,7 +9493,7 @@ ${safeMediaCss}
       'r'
     );
   }
- 
+
   function createElement(
     tag,
     attributes = {},
@@ -9209,7 +9501,7 @@ ${safeMediaCss}
   ) {
     const element =
       document.createElement(tag);
- 
+
     for (
       const [key, value] of
       Object.entries(attributes)
@@ -9242,7 +9534,7 @@ ${safeMediaCss}
         );
       }
     }
- 
+
     for (const child of children) {
       if (
         child === null ||
@@ -9250,17 +9542,17 @@ ${safeMediaCss}
       ) {
         continue;
       }
- 
+
       element.appendChild(
         typeof child === 'string'
           ? document.createTextNode(child)
           : child
       );
     }
- 
+
     return element;
   }
- 
+
   function createCheckbox(
     key,
     label,
@@ -9268,7 +9560,7 @@ ${safeMediaCss}
   ) {
     const id =
       `uwc-${key}`;
- 
+
     const input =
       createElement(
         'input',
@@ -9280,10 +9572,10 @@ ${safeMediaCss}
           }
         }
       );
- 
+
     input.checked =
       Boolean(settings[key]);
- 
+
     input.addEventListener(
       'change',
       () => {
@@ -9292,13 +9584,13 @@ ${safeMediaCss}
         ) {
           return;
         }
- 
+
         setOptions({
           [key]: input.checked
         });
       }
     );
- 
+
     return createElement(
       'label',
       {
@@ -9343,7 +9635,7 @@ ${safeMediaCss}
       ]
     );
   }
- 
+
   function createNumberInput(
     key,
     label,
@@ -9352,7 +9644,7 @@ ${safeMediaCss}
   ) {
     const id =
       `uwc-${key}`;
- 
+
     const input =
       createElement(
         'input',
@@ -9368,7 +9660,7 @@ ${safeMediaCss}
           }
         }
       );
- 
+
     input.addEventListener(
       'change',
       () => {
@@ -9377,13 +9669,13 @@ ${safeMediaCss}
         ) {
           return;
         }
- 
+
         setOptions({
           [key]: input.value
         });
       }
     );
- 
+
     return createElement(
       'div',
       {
@@ -9411,7 +9703,7 @@ ${safeMediaCss}
       ]
     );
   }
- 
+
   function createCapInput() {
     const select =
       createElement(
@@ -9423,7 +9715,7 @@ ${safeMediaCss}
           }
         }
       );
- 
+
     for (const cap of CAPS) {
       const option =
         createElement(
@@ -9436,13 +9728,13 @@ ${safeMediaCss}
                 : `${cap}px`
           }
         );
- 
+
       option.selected =
         settings.cap === cap;
- 
+
       select.appendChild(option);
     }
- 
+
     select.addEventListener(
       'change',
       () => {
@@ -9451,13 +9743,13 @@ ${safeMediaCss}
         ) {
           return;
         }
- 
+
         setOptions({
           cap: select.value
         });
       }
     );
- 
+
     return createElement(
       'div',
       {
@@ -9469,7 +9761,7 @@ ${safeMediaCss}
           {
             for: 'uwc-cap',
             text:
-              'Maximum content width'
+              'Conversation width'
           }
         ),
         select,
@@ -9478,13 +9770,19 @@ ${safeMediaCss}
           {
             className: 'uwc-hint',
             text:
-              'No limit uses the complete available chat-pane width.'
+              'Choose how much room your messages can use.'
           }
         )
       ]
     );
   }
- 
+
+  function getUiStatusText() {
+    if (!settings.enabled) return 'Your usual ChatGPT layout is active.';
+    if (!isWideActive()) return 'The usual layout is being used at this window size.';
+    return 'Your chats use more of the available space.';
+  }
+
   function createSection(
     title,
     children
@@ -9493,7 +9791,8 @@ ${safeMediaCss}
       'section',
       {
         className:
-          'uwc-section'
+          'uwc-section',
+        dataset: { section: String(title).toLowerCase().replace(/[^a-z0-9]+/g, '-') }
       },
       [
         createElement(
@@ -9504,7 +9803,7 @@ ${safeMediaCss}
       ]
     );
   }
- 
+
   function createRuntimeMetric(label, value, role) {
     return createElement(
       'div',
@@ -9532,7 +9831,7 @@ ${safeMediaCss}
       ]
     );
   }
- 
+
   function createRuntimeOverview() {
     const health = calculateHealthScore();
     const strategy =
@@ -9541,7 +9840,7 @@ ${safeMediaCss}
         runtime.lastCapabilities ||
         detectDomCapabilities()
       );
- 
+
     return createElement(
       'div',
       {
@@ -9584,20 +9883,20 @@ ${safeMediaCss}
       ]
     );
   }
- 
+
   function createHealthBreakdownPanel() {
     const health =
       calculateHealthScore();
- 
+
     const labels = {
-      runtime: 'Runtime',
+      runtime: 'Performance',
       styles: 'Styles',
       dom: 'DOM',
       width: 'Width',
       reconciliation: 'Reconcile',
       performance: 'Performance'
     };
- 
+
     return createElement(
       'div',
       {
@@ -9646,22 +9945,22 @@ ${safeMediaCss}
       )
     );
   }
- 
+
   function syncSettingsModal() {
     const modal =
       document.getElementById(
         ID.modal
       );
- 
+
     if (
       !modal ||
       runtime.modalSyncing
     ) {
       return;
     }
- 
+
     runtime.modalSyncing = true;
- 
+
     try {
       for (
         const element of
@@ -9671,11 +9970,11 @@ ${safeMediaCss}
       ) {
         const key =
           element.dataset.setting;
- 
+
         if (!(key in settings)) {
           continue;
         }
- 
+
         if (
           element instanceof
           HTMLInputElement
@@ -9686,12 +9985,12 @@ ${safeMediaCss}
           ) {
             element.checked =
               Boolean(settings[key]);
- 
+
             const statePill =
               modal.querySelector(
                 `[data-toggle-state-for="${key}"]`
               );
- 
+
             if (statePill) {
               statePill.textContent =
                 element.checked ? 'ON' : 'OFF';
@@ -9708,52 +10007,52 @@ ${safeMediaCss}
             String(settings[key]);
         }
       }
- 
+
       const statusTitle =
         modal.querySelector(
           '[data-role="status-title"]'
         );
- 
+
       const statusDetail =
         modal.querySelector(
           '[data-role="status-detail"]'
         );
- 
+
       if (statusTitle) {
         statusTitle.textContent =
           isWideActive()
-            ? 'UltraWide is active'
-            : 'UltraWide is inactive';
+            ? 'Wide view is on'
+            : 'Wide view is off';
       }
- 
+
       if (statusDetail) {
         statusDetail.textContent =
-          getStatusText();
+          getUiStatusText();
       }
- 
+
       const statusCard =
         modal.querySelector(
           '[data-role="status-card"]'
         );
- 
+
       if (statusCard) {
         statusCard.dataset.state =
           isWideActive()
             ? 'active'
             : 'inactive';
       }
- 
+
       try {
         const health =
           calculateHealthScore();
- 
+
         const strategy =
           runtime.strategySelection ||
           selectDomStrategy(
             runtime.lastCapabilities ||
             detectDomCapabilities()
           );
- 
+
         const metricValues = {
           'metric-health':
             `${health.score}/100`,
@@ -9772,7 +10071,7 @@ ${safeMediaCss}
           'health-pill':
             `${health.score} · ${health.status}`
         };
- 
+
         for (
           const [role, value] of
           Object.entries(metricValues)
@@ -9781,13 +10080,13 @@ ${safeMediaCss}
             modal.querySelector(
               `[data-role="${role}"]`
             );
- 
+
           if (target) {
             target.textContent =
               value;
           }
         }
- 
+
         for (
           const [key, value] of
           Object.entries(
@@ -9798,7 +10097,7 @@ ${safeMediaCss}
             modal.querySelector(
               `[data-health-component="${key}"]`
             );
- 
+
           if (target) {
             target.textContent =
               String(value);
@@ -9815,7 +10114,7 @@ ${safeMediaCss}
       runtime.modalSyncing = false;
     }
   }
- 
+
   function getSettingsSnapshot() {
     try {
       return JSON.stringify(
@@ -9825,17 +10124,17 @@ ${safeMediaCss}
       return '';
     }
   }
- 
+
   function getReloadGuardState() {
     try {
       const raw = sessionStorage.getItem(
         RELOAD_GUARD_KEY
       );
- 
+
       const parsed = raw
         ? JSON.parse(raw)
         : null;
- 
+
       return parsed && typeof parsed === 'object'
         ? parsed
         : { timestamps: [] };
@@ -9843,7 +10142,7 @@ ${safeMediaCss}
       return { timestamps: [] };
     }
   }
- 
+
   function requestGuardedReload(reason) {
     const now = Date.now();
     const state = getReloadGuardState();
@@ -9854,7 +10153,7 @@ ${safeMediaCss}
               CONFIG.reloadLoopWindowMs
         )
       : [];
- 
+
     if (
       timestamps.length >=
         CONFIG.reloadLoopMaxCount
@@ -9863,15 +10162,15 @@ ${safeMediaCss}
         reason,
         recentReloads: timestamps.length
       });
- 
+
       showToast(
         'Reload suppressed by loop protection'
       );
       return false;
     }
- 
+
     timestamps.push(now);
- 
+
     try {
       sessionStorage.setItem(
         RELOAD_GUARD_KEY,
@@ -9881,41 +10180,41 @@ ${safeMediaCss}
         })
       );
     } catch (_) {}
- 
+
     pushDebugEvent('reload-requested', {
       reason
     });
- 
+
     window.setTimeout(() => {
       location.reload();
     }, 0);
- 
+
     return true;
   }
- 
+
   function closeSettings(options = {}) {
     const reloadIfChanged =
       options?.reloadIfChanged !== false;
- 
+
     const modal =
       document.getElementById(ID.modal);
- 
+
     const openedSnapshot =
       runtime.modalSettingsSnapshot;
- 
+
     const currentSnapshot =
       getSettingsSnapshot();
- 
+
     const settingsChanged = Boolean(
       modal &&
       openedSnapshot &&
       currentSnapshot &&
       openedSnapshot !== currentSnapshot
     );
- 
+
     removeById(ID.modal);
     runtime.modalSettingsSnapshot = '';
- 
+
     if (
       reloadIfChanged &&
       settingsChanged &&
@@ -9924,12 +10223,12 @@ ${safeMediaCss}
     ) {
       return;
     }
- 
+
     const returnFocus =
       runtime.modalReturnFocus;
- 
+
     runtime.modalReturnFocus = null;
- 
+
     if (
       isConnectedElement(returnFocus) &&
       typeof returnFocus.focus ===
@@ -9940,12 +10239,12 @@ ${safeMediaCss}
       });
     }
   }
- 
+
   function getFocusableElements(container) {
     if (!isConnectedElement(container)) {
       return [];
     }
- 
+
     return Array.from(
       container.querySelectorAll(
         [
@@ -9970,37 +10269,37 @@ ${safeMediaCss}
       }
     });
   }
- 
+
   function openSettings() {
     getSelectorHealthSummary(true);
     ensureStyle(
       ID.uiStyle,
       getUiCss()
     );
- 
+
     const existing =
       document.getElementById(
         ID.modal
       );
- 
+
     if (existing) {
       syncSettingsModal();
- 
+
       existing.focus({
         preventScroll: true
       });
- 
+
       return;
     }
- 
+
     runtime.modalReturnFocus =
       isElement(document.activeElement)
         ? document.activeElement
         : null;
- 
+
     runtime.modalSettingsSnapshot =
       getSettingsSnapshot();
- 
+
     const modal =
       createElement(
         'div',
@@ -10068,7 +10367,7 @@ ${safeMediaCss}
                           className:
                             'uwc-subtitle',
                           text:
-                            'Layout and runtime preferences'
+                            'Make more room for what matters.'
                         }
                       )
                     ]
@@ -10089,7 +10388,7 @@ ${safeMediaCss}
                   )
                 ]
               ),
- 
+
               createElement(
                 'div',
                 {
@@ -10129,8 +10428,8 @@ ${safeMediaCss}
                               },
                               text:
                                 isWideActive()
-                                  ? 'UltraWide is active'
-                                  : 'UltraWide is inactive'
+                                  ? 'Wide view is on'
+                                  : 'Wide view is off'
                             }
                           ),
                           createElement(
@@ -10142,7 +10441,7 @@ ${safeMediaCss}
                                 role: 'status-detail'
                               },
                               text:
-                                getStatusText()
+                                getUiStatusText()
                             }
                           )
                         ]
@@ -10164,12 +10463,10 @@ ${safeMediaCss}
                       )
                     ]
                   ),
- 
-                  createRuntimeOverview(),
-                  createHealthBreakdownPanel(),
- 
+
+
                   createSection(
-                    'Layout',
+                    'Your view',
                     [
                       createElement(
                         'div',
@@ -10180,40 +10477,40 @@ ${safeMediaCss}
                         [
                           createCheckbox(
                             'enabled',
-                            'Enable script'
+                            'Use UltraWide'
                           ),
                           createCheckbox(
                             'wide',
-                            'Enable UltraWide'
+                            'Wider conversations'
                           ),
                           createCheckbox(
                             'left',
-                            'Left-align content'
+                            'Align messages to the left'
                           ),
                           createCapInput(),
                           createCheckbox(
                             'widenComposer',
-                            'Widen message composer'
+                            'Wider message box'
                           ),
                           createCheckbox(
                             'safeMedia',
-                            'Safe media constraints'
+                            'Keep images within view'
                           ),
                           createCheckbox(
                             'canvasSafeMode',
-                            'Split-view safe mode'
+                            'Adjust when panels are open'
                           ),
                           createCheckbox(
                             'toast',
-                            'Show status notifications'
+                            'Show notifications'
                           )
                         ]
                       )
                     ]
                   ),
- 
+
                   createSection(
-                    'Adaptive behavior',
+                    'Automatic layout',
                     [
                       createElement(
                         'div',
@@ -10224,29 +10521,29 @@ ${safeMediaCss}
                         [
                           createCheckbox(
                             'auto',
-                            'Enable adaptive mode'
+                            'Adjust automatically'
                           ),
                           createCheckbox(
                             'disableOnTouch',
-                            'Disable UltraWide on touch devices'
+                            'Keep standard layout on touchscreens'
                           ),
                           createNumberInput(
                             'autoMinWidth',
-                            'Minimum pane width',
+                            'Minimum chat width',
                             `${LIMITS.autoMinWidth[0]}–${LIMITS.autoMinWidth[1]} px`
                           ),
                           createNumberInput(
                             'disableBelowHeight',
-                            'Minimum window height',
+                            'Minimum screen height',
                             '0 disables this condition'
                           )
                         ]
                       )
                     ]
                   ),
- 
+
                   createSection(
-                    'Spacing',
+                    'Side spacing',
                     [
                       createElement(
                         'div',
@@ -10257,23 +10554,23 @@ ${safeMediaCss}
                         [
                           createNumberInput(
                             'gutterMin',
-                            'Minimum side gutter'
+                            'Minimum side space'
                           ),
                           createNumberInput(
                             'gutterVw',
-                            'Responsive gutter in vw',
+                            'Responsive side space',
                             '',
                             '0.1'
                           ),
                           createNumberInput(
                             'gutterMax',
-                            'Maximum side gutter'
+                            'Maximum side space'
                           )
                         ]
                       )
                     ]
                   ),
- 
+
                   createElement(
                     'details',
                     {
@@ -10285,7 +10582,7 @@ ${safeMediaCss}
                         'summary',
                         {
                           text:
-                            'Advanced runtime & diagnostics'
+                            'More settings'
                         }
                       ),
                       createElement(
@@ -10295,8 +10592,10 @@ ${safeMediaCss}
                             'uwc-advanced-body'
                         },
                         [
+                          createRuntimeOverview(),
+                          createHealthBreakdownPanel(),
                           createSection(
-                            'Runtime',
+                            'Performance',
                             [
                               createElement(
                                 'div',
@@ -10307,22 +10606,22 @@ ${safeMediaCss}
                                 [
                                   createNumberInput(
                                     'scanDebounceMs',
-                                    'DOM scan debounce',
+                                    'Update delay',
                                     'Low-power minimum: 550 ms'
                                   ),
                                   createNumberInput(
                                     'repairIntervalMs',
-                                    'Repair interval',
+                                    'Background check frequency',
                                     'Low-power minimum: 30 seconds'
                                   ),
                                   createNumberInput(
                                     'routePollMs',
-                                    'SPA route fallback interval',
+                                    'Navigation check frequency',
                                     'Low-power minimum: 30 seconds'
                                   ),
                                   createNumberInput(
                                     'toastMs',
-                                    'Status-message duration'
+                                    'Notification duration'
                                   ),
                                   createCheckbox(
                                     'lowPowerMode',
@@ -10338,18 +10637,18 @@ ${safeMediaCss}
                                   ),
                                   createCheckbox(
                                     'debugOverlay',
-                                    'Show debug overlay'
+                                    'Show on-screen diagnostics'
                                   ),
                                   createCheckbox(
                                     'closeSettingsOnBackdrop',
-                                    'Close settings on backdrop'
+                                    'Close when clicking outside'
                                   )
                                 ]
                               )
                             ]
                           ),
                           createSection(
-                            'Shortcuts',
+                            'Keyboard shortcuts',
                             [
                               createElement(
                                 'div',
@@ -10382,7 +10681,7 @@ ${safeMediaCss}
                                 {
                                   type: 'button',
                                   text:
-                                    'Download diagnostics',
+                                    'Save support details',
                                   onclick:
                                     downloadDiagnostics
                                 }
@@ -10392,7 +10691,7 @@ ${safeMediaCss}
                                 {
                                   type: 'button',
                                   text:
-                                    'Download bug report',
+                                    'Save problem report',
                                   onclick:
                                     downloadBugReport
                                 }
@@ -10402,23 +10701,23 @@ ${safeMediaCss}
                                 {
                                   type: 'button',
                                   text:
-                                    'Lifecycle torture test',
+                                    'Advanced stability check',
                                   onclick: async (event) => {
                                     const button =
                                       event?.currentTarget;
- 
+
                                     if (button) {
                                       button.disabled = true;
                                     }
- 
+
                                     showToast(
                                       'Running lifecycle torture test…'
                                     );
- 
+
                                     try {
                                       const result =
                                         await lifecycleTortureSelfTest();
- 
+
                                       if (
                                         runtime.started &&
                                         !document.getElementById(
@@ -10427,9 +10726,9 @@ ${safeMediaCss}
                                       ) {
                                         openSettings();
                                       }
- 
+
                                       syncSettingsModal();
- 
+
                                       showToast(
                                         result.ok
                                           ? 'Lifecycle torture test passed'
@@ -10441,7 +10740,7 @@ ${safeMediaCss}
                                           error?.message ||
                                           error
                                         );
- 
+
                                       if (
                                         runtime.started &&
                                         !document.getElementById(
@@ -10450,7 +10749,7 @@ ${safeMediaCss}
                                       ) {
                                         openSettings();
                                       }
- 
+
                                       showToast(
                                         'Lifecycle torture test failed'
                                       );
@@ -10459,7 +10758,7 @@ ${safeMediaCss}
                                         document.querySelector(
                                           `#${ID.modal} button[data-role="lifecycle-test"]`
                                         );
- 
+
                                       if (liveButton) {
                                         liveButton.disabled = false;
                                       }
@@ -10476,7 +10775,7 @@ ${safeMediaCss}
                       )
                     ]
                   ),
- 
+
                   createElement(
                     'div',
                     {
@@ -10489,16 +10788,16 @@ ${safeMediaCss}
                         {
                           type: 'button',
                           text:
-                            'Repair now',
+                            'Check and repair',
                           onclick: () => {
                             try {
                               const result =
                                 reconcileDesiredState(
                                   'settings-repair'
                                 );
- 
+
                               syncSettingsModal();
- 
+
                               if (result.pending) {
                                 showToast(
                                   'Repair scheduled · verification pending'
@@ -10520,7 +10819,7 @@ ${safeMediaCss}
                                   error?.message ||
                                   error
                                 );
- 
+
                               showToast(
                                 'Repair failed · see diagnostics'
                               );
@@ -10533,14 +10832,14 @@ ${safeMediaCss}
                         {
                           type: 'button',
                           text:
-                            'Run self-test',
+                            'Check everything',
                           onclick: () => {
                             try {
                               const result =
                                 selfTest();
- 
+
                               syncSettingsModal();
- 
+
                               showToast(
                                 result.ok
                                   ? `Self-test passed · ${result.health.score}/100`
@@ -10552,7 +10851,7 @@ ${safeMediaCss}
                                   error?.message ||
                                   error
                                 );
- 
+
                               showToast(
                                 'Self-test failed · see diagnostics'
                               );
@@ -10565,7 +10864,7 @@ ${safeMediaCss}
                         {
                           type: 'button',
                           text:
-                            'Copy diagnostics',
+                            'Copy support details',
                           onclick: () => {
                             void copyDiagnostics()
                               .catch((error) => {
@@ -10574,7 +10873,7 @@ ${safeMediaCss}
                                     error?.message ||
                                     error
                                   );
- 
+
                                 showToast(
                                   'Diagnostics copy failed'
                                 );
@@ -10588,7 +10887,7 @@ ${safeMediaCss}
                           type: 'button',
                           className:
                             'uwc-danger',
-                          text: 'Reset',
+                          text: 'Restore defaults',
                           onclick: () => {
                             if (
                               window.confirm(
@@ -10619,9 +10918,40 @@ ${safeMediaCss}
           )
         ]
       );
- 
+
+    // Consumer-first settings: move secondary controls without recreating
+    // inputs or replacing their event listeners. Every option remains reachable.
+    const advancedBody = modal.querySelector('.uwc-advanced-body');
+    const basicSection = modal.querySelector('.uwc-section[data-section="your-view"]');
+    const basicGrid = basicSection?.querySelector('.uwc-grid');
+    if (advancedBody && basicGrid) {
+      const extras = createElement('section', {
+        className: 'uwc-consumer-extras',
+        'aria-label': 'Additional display options'
+      });
+      for (const key of ['safeMedia', 'canvasSafeMode']) {
+        const field = modal.querySelector(`[data-setting="${key}"]`)?.closest('.uwc-check');
+        if (field) extras.appendChild(field);
+      }
+      if (extras.children.length) advancedBody.insertBefore(extras, advancedBody.firstChild);
+      for (const selector of ['[data-section="automatic-layout"]', '[data-section="side-spacing"]']) {
+        const section = modal.querySelector(`.uwc-section${selector}`);
+        if (section) advancedBody.appendChild(section);
+      }
+      const healthPill = modal.querySelector('.uwc-health-pill');
+      if (healthPill) advancedBody.appendChild(healthPill);
+      const footer = modal.querySelector('.uwc-actions');
+      if (footer) {
+        const utility = createElement('div', { className: 'uwc-consumer-tools', 'aria-label': 'Maintenance and support' });
+        for (const button of Array.from(footer.querySelectorAll('button'))) {
+          if (button.textContent?.trim() !== 'Done') utility.appendChild(button);
+        }
+        advancedBody.appendChild(utility);
+      }
+    }
+
     modal.tabIndex = -1;
- 
+
     modal.addEventListener(
       'click',
       (event) => {
@@ -10633,7 +10963,7 @@ ${safeMediaCss}
         }
       }
     );
- 
+
     modal.addEventListener(
       'keydown',
       (event) => {
@@ -10643,11 +10973,11 @@ ${safeMediaCss}
           closeSettings();
           return;
         }
- 
+
         if (event.key === 'Tab') {
           const focusable =
             getFocusableElements(modal);
- 
+
           if (focusable.length === 0) {
             event.preventDefault();
             modal.focus({
@@ -10655,15 +10985,15 @@ ${safeMediaCss}
             });
             return;
           }
- 
+
           const first =
             focusable[0];
- 
+
           const last =
             focusable[
               focusable.length - 1
             ];
- 
+
           if (
             event.shiftKey &&
             document.activeElement === first
@@ -10680,35 +11010,29 @@ ${safeMediaCss}
         }
       }
     );
- 
+
     const parent =
       getBody() ||
       getRoot();
- 
+
     if (!parent) {
       return;
     }
- 
+
     parent.appendChild(modal);
- 
-    const firstFocusable =
-      getFocusableElements(modal)[0];
- 
-    (
-      firstFocusable ||
-      modal
-    ).focus({
-      preventScroll: true
-    });
+
+    // Start with the dialog itself, not the Close button. Keyboard
+    // navigation remains available without an unnecessary focus ring.
+    modal.focus({ preventScroll: true });
   }
- 
+
   function verifyRuntime() {
     const mainStyle =
       document.getElementById(ID.style);
     const uiStyle =
       document.getElementById(ID.uiStyle);
     const root = getRoot();
- 
+
     const checks = {
       started: runtime.started,
       rootVersion:
@@ -10778,13 +11102,13 @@ ${safeMediaCss}
       invariants:
         evaluateLayoutInvariants().ok
     };
- 
+
     return {
       ok: Object.values(checks).every(Boolean),
       checks
     };
   }
- 
+
   function getDiagnostics() {
     // A diagnostic request is explicit, not a background poll. Sample the
     // live DOM once so the top-level health score and selectorHealth agree.
@@ -10795,7 +11119,7 @@ ${safeMediaCss}
     const compatibility =
       evaluateCompatibility(capabilities);
     const state = getState();
- 
+
     return {
       generatedAt: new Date().toISOString(),
       name: PRODUCT_NAME,
@@ -10918,20 +11242,20 @@ ${safeMediaCss}
       state
     };
   }
- 
+
   async function copyDiagnostics() {
     const output = JSON.stringify(
       getDiagnostics(),
       null,
       2
     );
- 
+
     try {
       await navigator.clipboard.writeText(output);
       showToast('UltraWide diagnostics copied');
       return true;
     } catch (_) {}
- 
+
     try {
       const textarea = document.createElement('textarea');
       textarea.value = output;
@@ -10939,24 +11263,24 @@ ${safeMediaCss}
       textarea.style.position = 'fixed';
       textarea.style.opacity = '0';
       textarea.style.pointerEvents = 'none';
- 
+
       (getBody() || getRoot())?.appendChild(textarea);
       textarea.select();
- 
+
       const copied = document.execCommand('copy');
       textarea.remove();
- 
+
       if (copied) {
         showToast('UltraWide diagnostics copied');
         return true;
       }
     } catch (_) {}
- 
+
     console.info('[UltraWide] Diagnostics:', getDiagnostics());
     showToast('Copy failed; diagnostics written to console');
     return false;
   }
- 
+
   function downloadDiagnostics() {
     const ok = downloadTextFile(
       `ultrawide-diagnostics-${Date.now()}.json`,
@@ -10967,22 +11291,22 @@ ${safeMediaCss}
       ),
       'application/json'
     );
- 
+
     showToast(
       ok
         ? 'UltraWide diagnostics downloaded'
         : 'Diagnostics download failed'
     );
- 
+
     return ok;
   }
- 
+
   function createBugReport() {
     const diagnostics = getDiagnostics();
     const health = diagnostics.health;
     const compatibility = diagnostics.compatibility;
     const state = diagnostics.state;
- 
+
     return [
       `# ${PRODUCT_NAME} Bug Report`,
       '',
@@ -11021,36 +11345,36 @@ ${safeMediaCss}
       state.lastError || 'none'
     ].join('\n');
   }
- 
+
   function downloadBugReport() {
     const ok = downloadTextFile(
       `ultrawide-bug-report-${Date.now()}.md`,
       createBugReport(),
       'text/markdown'
     );
- 
+
     showToast(
       ok
         ? 'UltraWide bug report downloaded'
         : 'Bug report download failed'
     );
- 
+
     return ok;
   }
- 
+
   function getState() {
     return {
       name: PRODUCT_NAME,
       version: VERSION,
       started: runtime.started,
       href: runtime.href,
- 
+
       enabled: settings.enabled,
       wide: settings.wide,
       activeWide: isWideActive(),
       left: settings.left,
       cap: settings.cap,
- 
+
       effectivePaneWidth:
         getAdaptiveWidth(),
       effectivePaneHeight:
@@ -11063,14 +11387,14 @@ ${safeMediaCss}
         runtime.paneResizeCount,
       lastPaneResizeAt:
         runtime.lastPaneResizeAt,
- 
+
       compatibility:
         runtime.lastCompatibility ||
         evaluateCompatibility(),
       domCapabilities:
         runtime.lastCapabilities ||
         detectDomCapabilities(),
- 
+
       auto: settings.auto,
       autoMinWidth:
         settings.autoMinWidth,
@@ -11078,21 +11402,21 @@ ${safeMediaCss}
         settings.disableOnTouch,
       disableBelowHeight:
         settings.disableBelowHeight,
- 
+
       gutterMin:
         settings.gutterMin,
       gutterVw:
         settings.gutterVw,
       gutterMax:
         settings.gutterMax,
- 
+
       widenComposer:
         settings.widenComposer,
       safeMedia:
         settings.safeMedia,
       canvasSafeMode:
         settings.canvasSafeMode,
- 
+
       canvasDetected:
         runtime.canvasDetected,
       transcriptRootDetected:
@@ -11222,12 +11546,12 @@ ${safeMediaCss}
         runtime.lastSavedAt,
       instanceStartedAt:
         runtime.instanceStartedAt,
- 
+
       markedTurns:
         runtime.marked
           .get(ATTR.turn)
           ?.size || 0,
- 
+
       conversationRootFound:
         (
           runtime.marked
@@ -11236,41 +11560,42 @@ ${safeMediaCss}
             )
             ?.size || 0
         ) > 0,
- 
+
+      composerScrollGuard: runtime.composerScrollGuardLastAudit,
       composerFound:
         (
           runtime.marked
             .get(ATTR.composer)
             ?.size || 0
         ) > 0,
- 
+
       styleMounted:
         Boolean(
           document.getElementById(
             ID.style
           )
         ),
- 
+
       bodyObserverAttached:
         Boolean(
           runtime.bodyObserver
         ),
- 
+
       headObserverAttached:
         Boolean(
           runtime.headObserver
         )
     };
   }
- 
+
   function start() {
     if (runtime.started) {
       return;
     }
- 
+
     cleanupLegacyArtifacts();
     loadSettings();
- 
+
     runtime.epoch += 1;
     runtime.started = true;
     runtime.instanceStartedAt = Date.now();
@@ -11315,98 +11640,98 @@ ${safeMediaCss}
     pushDebugEvent('runtime-start', {
       href: runtime.href
     });
- 
+
     installHistoryHooks();
     installObservers();
     attachPaneResizeObserver();
     bindEvents();
     registerMenus();
     restartTimers();
- 
+
     ensureStyle(
       ID.uiStyle,
       getUiCss()
     );
- 
+
     applyStyles();
     updateDomFingerprint('start');
     calculateHealthScore();
   }
- 
+
   function stop() {
     if (!runtime.started) {
       return;
     }
- 
+
     pushDebugEvent('runtime-stop');
     runtime.epoch += 1;
     runtime.started = false;
- 
+
     cancelScheduledScan();
- 
+
     if (runtime.queuedReconciliationFrame) {
       cancelNextFrame(
         runtime.queuedReconciliationFrame
       );
       runtime.queuedReconciliationFrame = 0;
     }
- 
+
     runtime.reconcileInProgress = false;
     runtime.reconcilePendingVerification = false;
     runtime.reconcilePendingSince = 0;
     runtime.queuedReconciliationReasons.clear();
     runtime.pendingRepairReasons.clear();
     runtime.pendingDirtyRegions.clear();
- 
+
     if (runtime.repairTimer) {
       clearInterval(
         runtime.repairTimer
       );
     }
- 
+
     if (runtime.routeTimer) {
       clearInterval(
         runtime.routeTimer
       );
     }
- 
+
     if (runtime.enforcementTimer) {
       clearTimeout(
         runtime.enforcementTimer
       );
     }
- 
+
     if (runtime.clipAlignmentTimer) {
       clearInterval(runtime.clipAlignmentTimer);
       runtime.clipAlignmentTimer = 0;
     }
- 
+
     if (runtime.routeDelayTimer) {
       clearTimeout(
         runtime.routeDelayTimer
       );
     }
- 
+
     if (runtime.toastTimer) {
       clearTimeout(
         runtime.toastTimer
       );
     }
- 
+
     runtime.repairTimer = 0;
     runtime.routeTimer = 0;
     runtime.enforcementTimer = 0;
     runtime.routeDelayTimer = 0;
     runtime.toastTimer = 0;
- 
+
     unbindEvents();
     disconnectObservers();
     restoreHistoryHooks();
     unregisterMenus();
- 
+
     clearManagedMarkers();
     clearRootState();
- 
+
     removeMainStyle();
     removeUiStyle();
     removeById(ID.toast);
@@ -11415,17 +11740,17 @@ ${safeMediaCss}
       reloadIfChanged: false
     });
   }
- 
+
   function restart() {
     stop();
     start();
   }
- 
+
   function installApi() {
     try {
       const previous =
         window.__mlUltraWide;
- 
+
       if (
         previous &&
         typeof previous.stop === 'function'
@@ -11434,30 +11759,26 @@ ${safeMediaCss}
           previous.stop();
         } catch (_) {}
       }
- 
-      Object.defineProperty(
-        window,
-        '__mlUltraWide',
-        {
-          configurable: true,
-          value: Object.freeze({
+
+      const api = Object.freeze({
             name: PRODUCT_NAME,
             version: VERSION,
- 
+
             start,
             stop,
             restart,
- 
+
             apply: applyStyles,
             scan: () =>
               scheduleScan(true),
             repair,
- 
+
             set: setOptions,
             reset: resetSettings,
             state: getState,
             diagnostics: getDiagnostics,
             capabilities: detectDomCapabilities,
+            composerOverflow: getComposerOverflowDiagnostics,
             verify: verifyRuntime,
             enforce: () =>
               enforceRuntimeIntegrity('api'),
@@ -11498,31 +11819,46 @@ ${safeMediaCss}
             clearSafeFallback: () => {
               const cleared =
                 clearSafeFallback('api');
- 
+
               requestRepair(
                 'safe-fallback-clear',
                 ALL_DIRTY_REGIONS,
                 true
               );
- 
+
               return cleared;
             },
             copyDiagnostics,
             downloadDiagnostics,
             downloadBugReport,
- 
+
             caps: () => [
               ...CAPS
             ],
- 
+
             openSettings,
             closeSettings
-          })
+          });
+      Object.defineProperty(window, '__mlUltraWide', {
+        configurable: true, value: api
+      });
+      // With GM_* grants Tampermonkey can isolate window from the page's
+      // DevTools console. unsafeWindow exposes the same backwards-compatible
+      // API when the browser/manager permits cross-world references.
+      try {
+        if (typeof unsafeWindow !== 'undefined' && unsafeWindow &&
+            unsafeWindow !== window) {
+          Object.defineProperty(unsafeWindow, '__mlUltraWide', {
+            configurable: true, value: api
+          });
         }
-      );
+      } catch (_) {
+        // The DOM-event diagnostic bridge remains available in sandboxed
+        // browsers that prohibit callable cross-world objects.
+      }
     } catch (_) {}
   }
- 
+
   installApi();
   start();
 })();

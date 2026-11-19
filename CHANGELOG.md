@@ -2,6 +2,20 @@
 
 All notable changes are recorded here. An entry under **Unreleased** is not a published release.
 
+## [2026.11.19.9] - 2026-11-19
+
+### Fixed
+
+- Restore full-width structured tables in Work and keep horizontal scrolling inside the widget. Thanks to [petrt3522](https://greasyfork.org/scripts/557270-ultrawide-chatgpt/discussions/344206) for reporting the issue and proposing a fix.
+- Contain horizontal overflow beneath the Work composer, including empty scrollbar tracks during `@` mentions.
+- Recover clipped or off-screen `@` suggestion menus near the active composer and restore temporary styles during cleanup.
+
+### Improved
+
+- Scope width and clipping overrides to the active chat pane, refresh layout markers after pane remounts, and ignore stale resize events.
+- Prioritize the chat composer over secondary forms and avoid treating inline editors and dialogs as split-view panels.
+- Add composer overflow and suggestion-menu geometry diagnostics. The existing DevTools API uses `unsafeWindow` where supported, with a DOM-event fallback.
+
 ## [2026.10.30.1] - 2026-10-30
 
 **Published on [Greasy Fork](https://greasyfork.org/en/scripts/557270-ultrawide-chatgpt).** See the [release notes](./RELEASE_NOTES_2026.10.30.1.md) for provenance, verification limits and support information.
