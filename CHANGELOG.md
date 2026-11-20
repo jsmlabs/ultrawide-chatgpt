@@ -1,5 +1,17 @@
 # Changelog
 
+## [Unreleased] — Repository maintenance (2026-11-20)
+
+### Restored
+- Reinstated the v2026.11.20.5 userscript after a subsequent commit unexpectedly reverted its metadata and focused-composer priority logic to v2026.11.20.4.
+- Recovered the custom PNG icon from an earlier Git commit, resolving the broken `@icon` path.
+- Removed the GitHub script's Greasy Fork update URLs to prevent automatic downgrades to the separately published older build.
+
+### Improved
+- Upgraded CI to Node 24 compatible major action versions and added self-contained repository integrity tests.
+- Added contributor guidance, security reporting guidance, a focused bug-report template, and editor conventions.
+- No intentional behavior change relative to the v2026.11.20.5 release; current-version browser integration remains unverified.
+
 ## [2026.11.20.5] - 2026-11-20
 
 ### Changed

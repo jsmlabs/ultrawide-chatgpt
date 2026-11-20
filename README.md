@@ -182,7 +182,7 @@ uwc.reset();
 - **Scope:** The project targets ChatGPT's website. It does not provide an official ChatGPT integration.
 - **Limitations:** ChatGPT's UI evolves. DOM-based layout detection cannot guarantee correct behavior across every browser, account, zoom level, Work view, or future interface revision.
 
-**Known repository packaging issue (checked November 20, 2026):** The userscript's `@icon` metadata currently references `assets/ultrawide-icon.png`, but that path is absent from the GitHub `master` tree. This may prevent the custom icon from loading; it is separate from the width and layout logic.
+**Bundled project icon:** The userscript uses [`assets/ultrawide-icon.png`](./assets/ultrawide-icon.png), restored from the project's own release history. An automated repository test now checks that the icon exists, is square, and matches the userscript metadata.
 
 ## 🧪 Development
 
@@ -218,6 +218,8 @@ The script uses scoped style rules, structural detection, lifecycle cleanup, and
 | [`CHANGELOG.md`](./CHANGELOG.md) | Chronological changes |
 | [`Release notes — 2026.11.20.5`](./RELEASE_NOTES_2026.11.20.5.md) | Current GitHub release context |
 | [`LICENSE`](./LICENSE) | Distribution terms |
+| [`CONTRIBUTING.md`](./CONTRIBUTING.md) | Contribution checklist and verification |
+| [`SECURITY.md`](./SECURITY.md) | Vulnerability reporting and privacy |
 
 </details>
 
@@ -225,7 +227,7 @@ The script uses scoped style rules, structural detection, lifecycle cleanup, and
 
 Thanks to **[petrt3522](https://greasyfork.org/scripts/557270-ultrawide-chatgpt/discussions/342892)** for investigating pane sizing, browser zoom, Work alignment, and clipping behavior, and for sharing improvements subsequently adapted and integrated in **[PR #4](https://github.com/jsmlabs/ultrawide-chatgpt/pull/4)**. The community [Work table follow-up](https://greasyfork.org/scripts/557270-ultrawide-chatgpt/discussions/344206) is also acknowledged.
 
-Bug reports and focused contributions are welcome through [GitHub Issues](https://github.com/jsmlabs/ultrawide-chatgpt/issues) and pull requests. Keep changes scoped, preserve existing settings and cleanup behavior, and include executable regression coverage where practical. Historical contributor notices and applicable earlier grants must be respected.
+For reporting and review expectations, see [CONTRIBUTING.md](./CONTRIBUTING.md) and [SECURITY.md](./SECURITY.md). Bug reports and focused contributions are welcome through [GitHub Issues](https://github.com/jsmlabs/ultrawide-chatgpt/issues) and pull requests. Keep changes scoped, preserve existing settings and cleanup behavior, and include executable regression coverage where practical. Historical contributor notices and applicable earlier grants must be respected.
 
 ## 📄 License
 

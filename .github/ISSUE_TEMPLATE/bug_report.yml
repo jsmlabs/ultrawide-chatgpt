@@ -1,0 +1,52 @@
+name: Bug report
+description: Report a reproducible UltraWide ChatGPT issue
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: "Review diagnostics before posting. Do not include private conversations, credentials, private URLs or other sensitive data."
+  - type: input
+    id: version
+    attributes:
+      label: Installed userscript version
+      placeholder: "2026.11.20.5"
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Browser and userscript manager
+      placeholder: "Edge / Tampermonkey"
+    validations:
+      required: true
+  - type: dropdown
+    id: view
+    attributes:
+      label: ChatGPT view
+      options:
+        - Chat
+        - Work
+        - Projects
+        - Split view / artifact
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Redacted diagnostics / screenshots (optional)
+    validations:
+      required: false
