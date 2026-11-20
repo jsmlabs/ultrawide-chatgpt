@@ -21,6 +21,6 @@ These are isolated checks, **not** live ChatGPT or Tampermonkey tests. UI change
 
 Use the [bug report template](./.github/ISSUE_TEMPLATE/bug_report.yml). Provide a version, browser/userscript manager, steps, expected/actual behavior and redacted diagnostics. Never post private conversations, URLs or credentials.
 
-Synchronize the userscript metadata, runtime version, README, CHANGELOG and release notes when making a new release. GitHub and Greasy Fork are **separate** publication channels: do not insert Greasy Fork automatic update directives into a newer GitHub development build.
+Synchronize the userscript metadata, runtime version, README and [CHANGELOG](./CHANGELOG.md) when making a new release. The changelog is the canonical release history; standalone release notes are optional and must not be linked unless they are committed. GitHub and Greasy Fork are **separate** publication channels: do not insert Greasy Fork automatic update directives into a newer GitHub development build.
 
 Respect [JSM Custom License v1.1](./LICENSE), all applicable earlier contributor notices, and the recorded contribution by [petrt3522](https://github.com/jsmlabs/ultrawide-chatgpt/pull/4).

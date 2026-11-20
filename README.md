@@ -216,7 +216,6 @@ The script uses scoped style rules, structural detection, lifecycle cleanup, and
 | [`script.user.js`](./script.user.js) | Userscript, settings, runtime, and diagnostics |
 | [`tests/`](./tests) | Isolated Node regression tests |
 | [`CHANGELOG.md`](./CHANGELOG.md) | Chronological changes |
-| [`Release notes — 2026.11.20.5`](./RELEASE_NOTES_2026.11.20.5.md) | Current GitHub release context |
 | [`LICENSE`](./LICENSE) | Distribution terms |
 | [`CONTRIBUTING.md`](./CONTRIBUTING.md) | Contribution checklist and verification |
 | [`SECURITY.md`](./SECURITY.md) | Vulnerability reporting and privacy |

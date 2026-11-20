@@ -13,14 +13,13 @@ const changelog = read('CHANGELOG.md');
 const version = script.match(/^\/\/ @version\s+(\S+)$/m)?.[1];
 const icon = 'assets/ultrawide-icon.png';
 
-test('userscript, runtime, README, changelog and release notes agree', () => {
+test('userscript, runtime, README and changelog agree', () => {
   assert.match(version || '', /^\d{4}\.\d{2}\.\d{2}\.\d+$/);
   assert.ok(script.includes("const VERSION = '" + version + "';"));
   assert.ok(script.includes('  Version: ' + version));
   assert.ok(readme.includes('GitHub-' + version));
-  assert.ok(readme.includes('RELEASE_NOTES_' + version + '.md'));
+  assert.match(readme, /\]\(\.\/CHANGELOG\.md\)/);
   assert.ok(changelog.includes('## [' + version + ']'));
-  assert.ok(fs.existsSync(path.join(root, 'RELEASE_NOTES_' + version + '.md')));
 });
 
 test('icon metadata resolves to a square PNG tracked in this repository', () => {
