@@ -4086,7 +4086,9 @@ ${structuredTableScroller}{
         isVisibleElement(element)
       )
       .map((element, index) => {
-        let score = index + (element === focused || element.contains(focused) ? 3000 : 0);
+        let score = index + (element === focused || element.contains?.(focused) ? 3000 : 0);
+        // A focused unrelated form must not outrank the canonical prompt.
+        if (element.matches(PRIMARY_COMPOSER_INPUT)) score += 800;
 
         try {
           if (element.id === 'prompt-textarea') {
