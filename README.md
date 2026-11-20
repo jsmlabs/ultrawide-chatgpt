@@ -6,7 +6,6 @@
 
 A customizable, responsive **Tampermonkey userscript** that gives ChatGPT more room to breathe on wide screens, while keeping the familiar interface.
 
-<img src="assets/ultrawide-icon.png" width="112" height="112" alt="UltraWide ChatGPT icon" />
 
 [![Version](https://img.shields.io/badge/version-2026.11.20.5-2563eb?style=flat-square)](./script.user.js)
 [![Userscript](https://img.shields.io/badge/platform-Tampermonkey-0f766e?style=flat-square)](https://www.tampermonkey.net/)
