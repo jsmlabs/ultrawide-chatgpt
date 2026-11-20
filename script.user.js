@@ -1,13 +1,13 @@
 // ==UserScript==
-// @name         UltraWide ChatGPT
+// @name         🖥️ UltraWide ChatGPT
 // @namespace    https://www.instagram.com/jsm.ig/
-// @version      2026.11.20.4
+// @version      2026.11.20.5
 // @author       jsmdev
-// @description  UltraWide ChatGPT with pane-relative sizing, scroll-safe composer guards, and reversible mention-menu recovery.
+// @description  ✨ Make ChatGPT better on any screen! Enjoy wider chats, adjustable layouts, easier reading, smooth scrolling, and more room to work.
 // @license      JSM-Custom-1.1
 // @match        https://chatgpt.com/*
 // @match        https://www.chatgpt.com/*
-// @icon         https://cdn.jsdelivr.net/gh/simple-icons/simple-icons/icons/openai.svg
+// @icon         https://raw.githubusercontent.com/jsmlabs/ultrawide-chatgpt/master/assets/ultrawide-icon.png
 // @run-at       document-start
 // @noframes
 // @grant        GM_getValue
@@ -19,7 +19,7 @@
 
 /*
   UltraWide ChatGPT
-  Version: 2026.11.20.4
+  Version: 2026.11.20.5
   --------------------------------------------------------------------------
   November 20, 2026 - Scroll ownership and editor-input hardening
   --------------------------------------------------------------------------
@@ -316,7 +316,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '2026.11.20.4';
+  const VERSION = '2026.11.20.5';
   const PRODUCT_NAME = 'UltraWide ChatGPT';
   const STORAGE_KEY = 'uwc.settings.v14';
 

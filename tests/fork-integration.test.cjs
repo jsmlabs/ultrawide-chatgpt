@@ -109,3 +109,12 @@ test('clipping cleanup restores owned translation but preserves external overrid
     assert.equal(runtime.clipThreadNode, null);
   }
 });
+
+
+test('custom icon, readable description and explicit update policy', () => {
+  assert.match(source, /^\/\/ @name\s+🖥️ UltraWide ChatGPT$/m);
+  assert.match(source, /^\/\/ @description\s+✨ Make ChatGPT better on any screen!/m);
+  assert.match(source, /^\/\/ @icon\s+https:\/\/raw\.githubusercontent\.com\/jsmlabs\/ultrawide-chatgpt\/master\/assets\/ultrawide-icon\.png$/m);
+  assert.doesNotMatch(source, /^\/\/ @(?:updateURL|downloadURL)\b/m);
+  assert.match(source, /element\.contains\?\.\(focused\)/);
+});

@@ -1,5 +1,19 @@
 # Changelog
 
+## [2026.11.20.5] - 2026-11-20
+
+### Changed
+- Update userscript display metadata with a clear, approachable benefit-focused description and display emoji.
+- Use the already-uploaded, square custom project icon instead of the generic OpenAI SVG.
+- Display the project icon in the GitHub README and align current release links.
+- Preserve all functional fixes and existing settings from version `2026.11.20.4`.
+- Do not add Greasy Fork auto-update URLs to the GitHub development source.
+
+### Verification
+- Syntax and repository Node regression tests are run by GitHub Actions for the published commit.
+- Real ChatGPT/Tampermonkey browser integration remains separately unverified.
+
+
 ## [2026.11.20.4] - 2026-11-20
 
 **GitHub source update.** Greasy Fork publication and live production compatibility must be verified separately.
