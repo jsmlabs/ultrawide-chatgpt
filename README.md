@@ -7,7 +7,7 @@
 A configurable Tampermonkey userscript that gives ChatGPT conversations more of your available screen space — without replacing the familiar interface.
 
 [![GitHub source version](https://img.shields.io/badge/GitHub-2026.11.20.5-2563eb?style=flat-square)](./script.user.js)
-[![Validation](https://github.com/jsmlabs/ultrawide-chatgpt/actions/workflows/userscript-validation.yml/badge.svg)](https://github.com/jsmlabs/ultrawide-chatgpt/actions/workflows/userscript-validation.yml)
+[![Validation](https://img.shields.io/github/actions/workflow/status/jsmlabs/ultrawide-chatgpt/userscript-validation.yml?branch=master&label=Validation&style=flat-square)](https://github.com/jsmlabs/ultrawide-chatgpt/actions/workflows/userscript-validation.yml)
 [![Tampermonkey](https://img.shields.io/badge/Userscript-Tampermonkey-0f766e?style=flat-square)](https://www.tampermonkey.net/)
 [![License](https://img.shields.io/badge/License-JSM%20Custom%201.1-64748b?style=flat-square)](./LICENSE)
 
