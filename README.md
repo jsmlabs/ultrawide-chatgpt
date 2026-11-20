@@ -2,259 +2,245 @@
 
 # 🖥️ UltraWide ChatGPT
 
-**Wider chats. Easier reading. More room to work.**
+**More room to read. More space to work.**
 
-A customizable, responsive **Tampermonkey userscript** that gives ChatGPT more room to breathe on wide screens, while keeping the familiar interface.
+A configurable Tampermonkey userscript that gives ChatGPT conversations more of your available screen space — without replacing the familiar interface.
 
+[![GitHub source version](https://img.shields.io/badge/GitHub-2026.11.20.5-2563eb?style=flat-square)](./script.user.js)
+[![Validation](https://github.com/jsmlabs/ultrawide-chatgpt/actions/workflows/userscript-validation.yml/badge.svg)](https://github.com/jsmlabs/ultrawide-chatgpt/actions/workflows/userscript-validation.yml)
+[![Tampermonkey](https://img.shields.io/badge/Userscript-Tampermonkey-0f766e?style=flat-square)](https://www.tampermonkey.net/)
+[![License](https://img.shields.io/badge/License-JSM%20Custom%201.1-64748b?style=flat-square)](./LICENSE)
 
-[![Version](https://img.shields.io/badge/version-2026.11.20.5-2563eb?style=flat-square)](./script.user.js)
-[![Userscript](https://img.shields.io/badge/platform-Tampermonkey-0f766e?style=flat-square)](https://www.tampermonkey.net/)
-[![ChatGPT](https://img.shields.io/badge/target-ChatGPT%20Chat%20%26%20Work-334155?style=flat-square)](https://chatgpt.com/)
-[![License](https://img.shields.io/badge/license-JSM%20Custom%20v1.1-64748b?style=flat-square)](./LICENSE)
+**[Install latest GitHub source](https://raw.githubusercontent.com/jsmlabs/ultrawide-chatgpt/master/script.user.js)** · **[Install from Greasy Fork](https://greasyfork.org/en/scripts/557270-ultrawide-chatgpt)** · [View source](./script.user.js) · [Report an issue](https://github.com/jsmlabs/ultrawide-chatgpt/issues)
 
-[**Install via Greasy Fork**](https://greasyfork.org/en/scripts/557270-ultrawide-chatgpt) · [GitHub source](./script.user.js) · [Features](#-features) · [Settings](#-configuration) · [Troubleshooting](#-troubleshooting) · [Source](./script.user.js)
+[Features](#-features) · [Installation](#-installation) · [Settings](#-settings) · [Troubleshooting](#-troubleshooting) · [Development](#-development)
 
 </div>
 
----
-
-## Version 2026.11.20.5
-
-**Branding and install metadata refresh · November 20, 2026.**
-
-- Adopt the custom square UltraWide icon already tracked in `assets/ultrawide-icon.png`.
-- Refresh the userscript name and description for clearer Tampermonkey presentation.
-- Retain all previous composer, scrolling, popup and lifecycle fixes from `2026.11.20.4`.
-- Keep explicit `@updateURL` and `@downloadURL` absent in GitHub source to avoid silently overwriting local development builds.
-
-**Update note:** The GitHub source is authoritative for this repository. Greasy Fork publishing is a separate step and may lag behind GitHub.
-
-**Previous functional release · November 20, 2026.**
-
-- Strengthens composer scrollbar detection without suppressing real horizontal scroll hosts or scroll-area viewport siblings.
-- Recognizes active `@` suggestions at the cursor, including mentions in the middle of a draft, while avoiding email-address false positives.
-- Tightens popup geometry recovery, focus ownership, and temporary style cleanup for Chat, Projects, split view, and Work.
-- Retains reversible runtime guards, existing settings, keyboard shortcuts, and the built-in diagnostics API.
-
-**Verification:** JavaScript syntax and eight focused Node checks of scroll eligibility and caret-context parsing passed locally. These do **not** establish full browser, Tampermonkey, or production ChatGPT compatibility. The integrated browser tests previously reported for this version were performed against a local test surface, not ChatGPT itself. See the [current release notes](./RELEASE_NOTES_2026.11.20.5.md).
-
-**Community credits:** [petrt3522](https://greasyfork.org/scripts/557270-ultrawide-chatgpt/discussions/342892) contributed pane-sizing and layout investigations integrated and credited in this project, including the [merged contribution PR #4](https://github.com/jsmlabs/ultrawide-chatgpt/pull/4). The [Work table follow-up](https://greasyfork.org/scripts/557270-ultrawide-chatgpt/discussions/344206) is also acknowledged.
+> [!IMPORTANT]
+> **The distribution channels are not yet in sync.** On **November 20, 2026**, the GitHub `master` branch contains **v2026.11.20.5**, while the public Greasy Fork listing serves **v2026.10.30.1**. Use the GitHub source link above for the newer code; use Greasy Fork for its currently published build. Check the version in Tampermonkey before updating. The GitHub userscript intentionally omits `@updateURL` and `@downloadURL`, so GitHub-source installations require manual updates.
 
 ## ✨ Features
 
-| | Capability | What it does |
-| :--: | --- | --- |
-| ↔️ | **Wider conversations** | Expands conversation width, with optional caps from 1,200 to 4,200 px or no fixed cap. |
-| 📐 | **Adaptive sizing** | Checks the effective chat-pane width instead of relying only on the viewport. |
-| ⌨️ | **Optional wide composer** | Controls composer width separately from conversation width. |
-| 🪟 | **Split-view awareness** | Applies a safety-oriented layout when supported editor or artifact panels are detected. |
-| 🖼️ | **Safer content overflow** | Optionally constrains media, tables, and code blocks within the available space. |
-| 🔄 | **SPA recovery** | Rechecks layout after navigation, relevant DOM remounts, and pane resizing. |
-| 🌙 | **Low-power operation** | Coalesces work, reduces routine polling, and pauses selected background work in hidden tabs. |
-| 🩺 | **Runtime diagnostics** | Exposes integrity checks, health reports, repair actions, and diagnostics exports. |
+| | Feature | What you get |
+| :---: | --- | --- |
+| ↔️ | **Wider conversations** | Use your available chat-pane width, with optional limits from **1,200–4,200 px** or no fixed cap. |
+| 📐 | **Adaptive layout** | Account for the active pane, sidebar changes, browser zoom, and constrained windows. |
+| ✍️ | **Independent composer sizing** | Widen the message composer separately; avoid unrelated editors and dialogs. |
+| 🪟 | **Chat, Work & split views** | Apply pane-aware positioning and cautious layout handling where supported. |
+| 📄 | **Content overflow safeguards** | Keep long code, tables, and rich media within their appropriate scrolling or layout boundaries where possible. |
+| 🔄 | **Automatic recovery** | Reconcile layout after supported navigation, DOM remounts, and pane-size changes, with bounded repair attempts. |
+| ⚡ | **Low-power defaults** | Debounce DOM work, reduce periodic activity, and pause selected work in background tabs. |
+| 🩺 | **Diagnostics & recovery tools** | Inspect runtime health, verify layout, request repairs, and export troubleshooting reports. |
 
-**Designed for large monitors, but pane-aware:** Adaptive widening is enabled by default and requires an effective chat-pane width of at least **1,100 px**. The default horizontal gutter stays between 16 and 36 px. Smaller or constrained panes can retain the native layout.
+UltraWide changes **layout**, not ChatGPT's underlying models or features. The goal is to make an existing conversation workspace easier to use on larger screens while preserving native interactions.
+
+### How adaptive width works
+
+With the defaults, widening is eligible when the **effective chat pane** is at least **1,100 CSS pixels** wide and the window is at least **560 px** high. Horizontal gutters vary between **16 and 36 px**. In narrower panes or split views, the script may deliberately retain a more native layout rather than force an oversized one.
 
 ## 🚀 Installation
 
-**Requirements:** A modern browser, [Tampermonkey](https://www.tampermonkey.net/) with the declared `GM_*` APIs enabled, and access to [ChatGPT](https://chatgpt.com/).
+**Requirements:** A modern browser with [Tampermonkey](https://www.tampermonkey.net/), access to [ChatGPT](https://chatgpt.com/), and the userscript's declared permissions. The script targets `chatgpt.com` and `www.chatgpt.com`.
 
-1. **[Install the current version from Greasy Fork](https://greasyfork.org/en/scripts/557270-ultrawide-chatgpt)**. Review the source and permissions, then approve installation in Tampermonkey.
-2. If automatic installation is unavailable, open [`script.user.js`](./script.user.js), copy its complete contents, and create a new Tampermonkey userscript. Preserve the `// ==UserScript==` metadata block.
-3. Open or refresh **[chatgpt.com](https://chatgpt.com/)**.
-4. Use the Tampermonkey **UltraWide ChatGPT** menu, or press **`Alt+S`** with focus outside the message editor, to open settings.
+1. Install and enable **Tampermonkey** in your browser.
+2. Pick **one** installation source:
+   - **[Latest GitHub source](https://raw.githubusercontent.com/jsmlabs/ultrawide-chatgpt/master/script.user.js)** — newer repository build; manually update when needed.
+   - **[Greasy Fork](https://greasyfork.org/en/scripts/557270-ultrawide-chatgpt)** — separately published version; check its displayed version before installing.
+3. Approve the userscript installation. If your manager opens the GitHub link as plain text, copy the complete [`script.user.js`](./script.user.js) source into a new Tampermonkey script, including its metadata header.
+4. Refresh **[chatgpt.com](https://chatgpt.com/)**. Press **`Alt+S`** outside the message editor to open UltraWide settings, or use the Tampermonkey menu.
 
 > [!TIP]
-> Updating? Replace the existing installation rather than running two enabled copies. The current storage key is `uwc.settings.v14`; migration logic supports earlier settings keys. Refresh ChatGPT after updating.
+> **Already installed?** Update or replace your existing UltraWide script instead of enabling two copies. Refresh ChatGPT afterwards. Settings are stored under `uwc.settings.v14`, with migrations for older keys.
 
-**Disable or remove:** Press `Alt+O` to toggle layout behavior, disable the script in Tampermonkey, or uninstall it through your userscript manager. Uninstalling may not clear retained settings automatically.
+**Disable or uninstall:** Press `Alt+O` to toggle the script's layout behavior, disable it in Tampermonkey, or uninstall it in your userscript manager. Removing the script does not necessarily delete saved userscript settings.
 
-## 🎛️ Configuration
+## 🎛️ Settings
 
-Open **Settings** with `Alt+S` or the Tampermonkey menu. Defaults are documented below; advanced intervals may be adjusted automatically in low-power mode.
+Open the built-in settings dialog with **`Alt+S`** or the **UltraWide ChatGPT** Tampermonkey menu.
 
-| Setting | Default | Purpose |
+| Control | Default | Description |
 | --- | :---: | --- |
-| `enabled` / `wide` | `true` / `true` | Master layout and widening switches |
-| `left` | `true` | Left-align managed conversation content |
-| `cap` | `"none"` | Optional width cap; string value |
-| `auto` | `true` | Enable pane-width and device checks |
-| `autoMinWidth` | `1100` | Minimum effective chat-pane width in px |
-| `disableBelowHeight` | `560` | Minimum window height in px; `0` disables |
-| `disableOnTouch` | `false` | Optionally avoid adaptive widening on touch devices |
-| `gutterMin` / `gutterMax` | `16` / `36` | Minimum and maximum horizontal gutters in px |
-| `gutterVw` | `2` | Responsive gutter component in vw |
-| `widenComposer` | `true` | Independently widen the message composer |
-| `safeMedia` | `true` | Constrain rich content to avoid overflow |
-| `canvasSafeMode` | `true` | Use a cautious layout in detected split views |
-| `lowPowerMode` | `true` | Reduce background DOM work |
-| `pauseWhenHidden` | `true` | Defer selected work in hidden tabs |
-| `performanceTelemetry` | `true` | Collect lightweight local timing measurements |
-| `debugOverlay` | `false` | Show an on-page diagnostics overlay |
-| `toast` / `toastMs` | `true` / `1500` | Status notifications and duration in ms |
-| `closeSettingsOnBackdrop` | `true` | Dismiss settings by clicking outside the dialog |
+| UltraWide layout | On | Enable the main width adjustments. |
+| Content alignment | Left | Left-align managed conversation content. |
+| Maximum width | None | No fixed cap, or choose a preset. |
+| Adaptive sizing | On | Use actual pane and viewport conditions. |
+| Minimum pane width | 1,100 px | Threshold for adaptive widening. |
+| Minimum window height | 560 px | Keep a safer layout in short windows. |
+| Composer widening | On | Control composer width independently. |
+| Media safeguards | On | Reduce avoidable content overflow. |
+| Split-view safe mode | On | Be conservative when adjacent panels are detected. |
+| Low-power mode | On | Reduce routine background work. |
+| Pause when hidden | On | Defer selected background checks in hidden tabs. |
+| Debug overlay | Off | Show on-page diagnostic information. |
 
-**Allowed `cap` values:** `none`, `1200`, `1400`, `1600`, `1800`, `2000`, `2200`, `2400`, `2800`, `3200`, `3600`, `4200` (all strings).
+**Width presets:** `none`, `1200`, `1400`, `1600`, `1800`, `2000`, `2200`, `2400`, `2800`, `3200`, `3600`, `4200`. These configuration values are **strings**, not numbers.
 
 <details>
-<summary><strong>Advanced runtime settings</strong></summary>
+<summary><strong>Advanced configuration and exact defaults</strong></summary>
 
-| Setting | Base default | Meaning |
-| --- | ---: | --- |
-| `scanDebounceMs` | `240` | Structural scan debounce (ms) |
-| `repairIntervalMs` | `10000` | Repair interval (ms) |
-| `routePollMs` | `10000` | SPA route polling fallback (ms) |
+| Setting | Default | Purpose |
+| --- | --- | --- |
+| `enabled` / `wide` | `true` / `true` | Master enable and widening controls |
+| `left` | `true` | Conversation alignment |
+| `cap` | `'none'` | Width cap string |
+| `auto` / `autoMinWidth` | `true` / `1100` | Pane-aware adaptive sizing |
+| `disableOnTouch` | `false` | Optionally avoid adaptive sizing on touch devices |
+| `disableBelowHeight` | `560` | Minimum window height; `0` disables the threshold |
+| `gutterMin` / `gutterVw` / `gutterMax` | `16` / `2` / `36` | Responsive horizontal gutters |
+| `widenComposer` / `safeMedia` | `true` / `true` | Composer and content safeguards |
+| `canvasSafeMode` | `true` | Split-view-aware layout |
+| `lowPowerMode` / `pauseWhenHidden` | `true` / `true` | Background performance behavior |
+| `performanceTelemetry` | `true` | Local performance measurements |
+| `debugOverlay` | `false` | On-page runtime diagnostics |
+| `toast` / `toastMs` | `true` / `1500` | Notifications and duration in milliseconds |
+| `closeSettingsOnBackdrop` | `true` | Close dialog by clicking the backdrop |
+| `scanDebounceMs` | `240` | Structural scan debounce in milliseconds |
+| `repairIntervalMs` | `10000` | Base repair interval in milliseconds |
+| `routePollMs` | `10000` | Base route-check interval in milliseconds |
 
-In default low-power mode, the effective scan debounce is at least **550 ms** and the two routine intervals above are at least **30 s**. Structural changes may still trigger immediate recovery. See `window.__mlUltraWide.state()` for effective values.
+With low-power mode on, effective scan debounce is at least **550 ms**, and routine repair and route intervals are at least **30 seconds**. Actual runtime values are exposed through `window.__mlUltraWide.state()` when the page-console bridge is available.
 
 </details>
 
 ### Keyboard shortcuts
 
-Shortcuts operate outside recognized typing fields and can conflict with browser or extension bindings.
+Shortcuts are ignored in recognized typing fields. Some browser or extension bindings may take precedence.
 
-| Keys | Action | Keys | Action |
+| Shortcut | Action | Shortcut | Action |
 | --- | --- | --- | --- |
-| `Alt+S` | Open settings | `Alt+O` | Toggle layout |
+| `Alt+S` | Open settings | `Alt+O` | Enable / disable layout |
 | `Alt+U` | Toggle wide mode | `Alt+L` | Toggle left alignment |
 | `Alt+M` | Cycle width caps | `Alt+A` | Toggle adaptive mode |
-| `Alt+C` | Toggle split-view safe mode | `Alt+R` | Reset defaults |
+| `Alt+C` | Toggle split-view safe mode | `Alt+R` | Reset settings |
 
 > [!CAUTION]
-> Closing settings after saving changes can trigger a guarded page reload. Preserve unfinished ChatGPT drafts before changing settings.
+> Saving some settings can trigger a guarded page reload. Preserve any unfinished ChatGPT draft before changing settings.
 
-## 🧩 Console API
+## 🛠️ Troubleshooting
 
-The script provides the local `window.__mlUltraWide` API. In the browser console on a ChatGPT tab where the script is active:
+| Symptom | What to check |
+| --- | --- |
+| Chat still looks narrow | Confirm only one enabled copy, verify `enabled` / `wide`, check the effective pane width and adaptive threshold, then refresh. |
+| Conversation becomes cramped | Try a smaller width cap or leave adaptive sizing and split-view safe mode enabled. |
+| Composer remains narrow | Check `widenComposer`; Work may use a separate, intentionally sized composer. |
+| Tables or code overflow | Keep `safeMedia` enabled. A real horizontal scroller inside a table or code widget may be intentional. |
+| A scrollbar appears near `@` suggestions | Check whether it belongs to a genuine scrollable region. The script aims to avoid hiding functional scrollbars. |
+| Layout changes after navigation | Use the settings-menu repair action or run `window.__mlUltraWide.repair()` if accessible. |
+| High background activity | Enable `lowPowerMode` and `pauseWhenHidden`; turn off the debug overlay. |
+| Keyboard shortcut does nothing | Move focus outside inputs, then check conflicting browser or extension shortcuts. |
+| Settings are not saved | Check Tampermonkey storage permissions and `state().storageAvailable`. |
+| Console API is undefined | Check the active script, browser permissions, and console execution context. Some userscript sandboxes block access to page globals; use the Tampermonkey menu instead. |
+
+**For help:** [Open a GitHub issue](https://github.com/jsmlabs/ultrawide-chatgpt/issues/new) with the script version, browser, Tampermonkey version, ChatGPT view, reproduction steps, expected versus actual behavior, and screenshots or **redacted** diagnostics.
+
+> [!WARNING]
+> Diagnostics can include page URLs, browser information, layout indicators, settings, and recent runtime events. Inspect and redact them before sharing. Never publish conversation content, private URLs, or credentials.
+
+## 🧩 Diagnostics and recovery
+
+If the page-console bridge is available, open DevTools on the ChatGPT tab:
 
 ```js
 const uwc = window.__mlUltraWide;
 
-// Inspect
+// Read-only inspection
 uwc.state();
 uwc.verify();
 uwc.health();
-uwc.capabilities();
 uwc.diagnostics();
 
-// Configure - cap values are strings
+// Configuration — cap values must be strings
 uwc.set({ cap: '2400', auto: true, widenComposer: false });
 
-// Recover or restore
+// Recovery
 uwc.repair();
 uwc.reset();
 ```
 
 <details>
-<summary><strong>More inspection, lifecycle, and export commands</strong></summary>
+<summary><strong>Additional runtime commands</strong></summary>
 
-| Area | Available methods |
+| Task | Methods |
 | --- | --- |
-| Runtime | `start()`, `stop()`, `restart()`, `apply()`, `scan()`, `reconcile()`, `enforce()` |
+| Inspect | `capabilities()`, `selectorHealth()`, `invariants()`, `healthBreakdown()`, `performanceBudget()`, `composerOverflow()` |
+| Layout lifecycle | `apply()`, `scan()`, `reconcile()`, `start()`, `stop()`, `restart()` |
+| Recovery | `repairPlan()`, `repairHistory()`, `repairEffectiveness()`, `clearSafeFallback()` |
 | Settings | `set({...})`, `reset()`, `caps()`, `openSettings()`, `closeSettings()` |
-| Integrity | `verify()`, `invariants()`, `health()`, `healthBreakdown()`, `selectorHealth()` |
-| Analysis | `state()`, `diagnostics()`, `capabilities()`, `strategy()`, `fingerprint()`, `performanceBudget()` |
-| Recovery | `repair()`, `repairPlan()`, `repairHistory()`, `repairEffectiveness()`, `convergence()`, `failureCodes()`, `clearSafeFallback()` |
-| Tests | `selfTest()`, `regressionTest()`, `lifecycleTortureSelfTest()` |
-| Reports | `debugEvents()`, `copyDiagnostics()`, `downloadDiagnostics()`, `downloadBugReport()` |
+| Reports | `copyDiagnostics()`, `downloadDiagnostics()`, `downloadBugReport()` |
+| Self-tests | `selfTest()`, `regressionTest()`, `lifecycleTortureSelfTest()` |
 
-Some commands mutate runtime state. In particular, `lifecycleTortureSelfTest()` intentionally stops and restarts the script.
+**Note:** Some methods change runtime state; `lifecycleTortureSelfTest()` deliberately stops and restarts the script. The console API is exposed through `unsafeWindow` when permitted. A userscript isolation boundary or Content Security Policy can still prevent direct console access.
 
 </details>
 
-## 🛠️ Troubleshooting
+## 🔒 Privacy and compatibility
 
-| Problem | First checks |
-| --- | --- |
-| No width change | Confirm only one active copy, `state().enabled`, `state().wide`, and refresh. |
-| Still narrow | Inspect `state().activeWide`, pane width, `autoMinWidth`, and viewport height. |
-| Composer unchanged | Confirm `widenComposer` is enabled. Dialogs and unrelated editors are intentionally excluded. |
-| Split view is cramped | Check `canvasSafeMode`; try a smaller cap or adaptive sizing. |
-| Layout changed after navigation | Run `window.__mlUltraWide.repair()` and inspect `verify()`. |
-| High CPU usage | Leave `lowPowerMode` and `pauseWhenHidden` enabled; disable the debug overlay. |
-| Hotkey does nothing | Move focus out of the composer; check browser and extension shortcut conflicts. |
-| Settings do not persist | Inspect `state().storageAvailable` and userscript storage permissions. |
-| Safe fallback active | Inspect `state().safeFallbackReason` and `verify()` before clearing it. |
-| `window.__mlUltraWide` is undefined | Confirm Tampermonkey is enabled for `chatgpt.com` and the userscript matches the page. Check extension permissions and console execution context; an isolated userscript world or Content Security Policy may prevent access from the page console. Try the Tampermonkey menu/`Alt+S` first. |
+- **Local operation:** UltraWide runs in your browser and does not require a separate backend or account.
+- **Storage:** Preferences use Tampermonkey's `GM_getValue` / `GM_setValue` storage; optional performance diagnostics are collected locally.
+- **Permissions:** The source declares storage, userscript-menu, and `unsafeWindow` permissions; no `@require` or outbound request grant is declared.
+- **Scope:** The project targets ChatGPT's website. It does not provide an official ChatGPT integration.
+- **Limitations:** ChatGPT's UI evolves. DOM-based layout detection cannot guarantee correct behavior across every browser, account, zoom level, Work view, or future interface revision.
 
-For a reproducible issue, capture the script version, browser, userscript manager, ChatGPT view, steps, expected and actual result, and **redacted** diagnostics. [Open a GitHub issue](https://github.com/jsmlabs/ultrawide-chatgpt/issues/new).
+**Known repository packaging issue (checked November 20, 2026):** The userscript's `@icon` metadata currently references `assets/ultrawide-icon.png`, but that path is absent from the GitHub `master` tree. This may prevent the custom icon from loading; it is separate from the width and layout logic.
 
-> [!WARNING]
-> Diagnostic exports may include page URLs, user-agent data, settings, DOM indicators, and runtime events. Review and redact before sharing; never publish private conversations or credentials.
+## 🧪 Development
 
-## 🧪 Verification and limitations
-
-The repository provides isolated Node tests for pane sizing and remounts, composer selection, split-view detection, clipping cleanup, performance, scroll guards, and mention-at-caret detection. The latest local pre-publication checks included JavaScript syntax and eight focused Node cases. Do not treat isolated tests as proof of live ChatGPT, Work, Projects, zoom, or Tampermonkey compatibility.
-
-To check JavaScript syntax locally, after obtaining the repository:
+**No build step or application runtime dependencies are required.** `script.user.js` is a standalone userscript. Node.js is used for optional local syntax and regression checks.
 
 ```bash
+git clone https://github.com/jsmlabs/ultrawide-chatgpt.git
+cd ultrawide-chatgpt
 node --check script.user.js
 node --test tests/*.test.cjs
 ```
 
-To evaluate the current browser session:
+The [GitHub Actions workflow](./.github/workflows/userscript-validation.yml) runs these checks on pull requests and pushes to `master`. Tests cover isolated layout, integration, and scroll-regression contracts. **A passing syntax or Node test does not establish live browser, Tampermonkey, Work, or production ChatGPT compatibility.** Manual browser validation is still necessary for navigation, long conversations, pane resizing, tables, `@` menus, and enable/disable cleanup.
 
-```js
-window.__mlUltraWide.regressionTest();
-window.__mlUltraWide.selfTest();
-window.__mlUltraWide.verify();
+<details>
+<summary><strong>Architecture and project files</strong></summary>
+
+```mermaid
+flowchart LR
+    A[Navigation and DOM changes] --> B[Detect active chat pane]
+    B --> C[Measure available space]
+    C --> D[Apply scoped layout styles]
+    D --> E[Verify and repair]
+    E -. Relevant changes .-> B
 ```
 
-**Practical acceptance criteria:** confirm normal and long conversations, chat-pane resizing, sidebars, Work, split view, composer independence, refresh persistence, disable/re-enable cleanup, and navigation recovery. Check that the page does not overflow horizontally and inspect diagnostics for persistent errors. These are manual checks, not reported successful tests.
+The script uses scoped style rules, structural detection, lifecycle cleanup, and bounded DOM observation. Detection and recovery are heuristic rather than a guarantee against future UI changes.
 
-## 🏗️ How it works
+| File | Purpose |
+| --- | --- |
+| [`script.user.js`](./script.user.js) | Userscript, settings, runtime, and diagnostics |
+| [`tests/`](./tests) | Isolated Node regression tests |
+| [`CHANGELOG.md`](./CHANGELOG.md) | Chronological changes |
+| [`Release notes — 2026.11.20.5`](./RELEASE_NOTES_2026.11.20.5.md) | Current GitHub release context |
+| [`LICENSE`](./LICENSE) | Distribution terms |
 
-```text
-ChatGPT navigation / DOM / pane resize
-                 │
-                 ▼
-     Detect layout capabilities
-                 │
-                 ▼
-       Measure effective pane
-                 │
-                 ▼
-    Select targets + apply CSS
-                 │
-                 ▼
-       Verify and repair state
-```
+</details>
 
-UltraWide is a **single self-contained userscript**, with no application build step. It uses targeted layout rules and markers, ChatGPT thread-width variables where available, and bounded observation/reconciliation to handle supported DOM changes. Detection and split-view classification are heuristic; they cannot guarantee compatibility with future interface revisions. The userscript runs in the browser and does not replace or proxy the ChatGPT service.
+## 🤝 Community and contributions
 
-**Repository files:** [`script.user.js`](./script.user.js) · [`CHANGELOG.md`](./CHANGELOG.md) · [`Latest release notes`](./RELEASE_NOTES_2026.11.20.5.md) · [`Historical release notes`](./RELEASE_NOTES_2026.10.30.1.md) · [`Tests`](./tests) · [`CI`](./.github/workflows/userscript-validation.yml) · [`LICENSE`](./LICENSE)
+Thanks to **[petrt3522](https://greasyfork.org/scripts/557270-ultrawide-chatgpt/discussions/342892)** for investigating pane sizing, browser zoom, Work alignment, and clipping behavior, and for sharing improvements subsequently adapted and integrated in **[PR #4](https://github.com/jsmlabs/ultrawide-chatgpt/pull/4)**. The community [Work table follow-up](https://greasyfork.org/scripts/557270-ultrawide-chatgpt/discussions/344206) is also acknowledged.
 
-## 🤝 Community contributions
+Bug reports and focused contributions are welcome through [GitHub Issues](https://github.com/jsmlabs/ultrawide-chatgpt/issues) and pull requests. Keep changes scoped, preserve existing settings and cleanup behavior, and include executable regression coverage where practical. Historical contributor notices and applicable earlier grants must be respected.
 
-**petrt3522** proposed practical layout and recovery improvements for UltraWide ChatGPT in an [October 29, 2026 Greasy Fork discussion](https://greasyfork.org/scripts/557270-ultrawide-chatgpt/discussions/342892) and offered a [modified script](https://greasyfork.org/en/scripts/602847-ultrawide-chatgpt). Thank you for investigating the issues, sharing the work, and offering to contribute it back to the original project.
+## 📄 License
 
-[Merged PR #4](https://github.com/jsmlabs/ultrawide-chatgpt/pull/4) integrates the contributor's pane-relative sizing, Work and composer handling, clipping diagnostics, bounded recovery, selector-health improvements, and performance optimizations. The maintainer adapted the code to retain existing settings and cleanup contracts. The exact [testing limits](#-verification-and-limitations) remain visible; attribution is preserved in code and release documentation.
+Copyright © 2026 JSM. Maintained by **jsmdev**.
 
-**Provenance and verification:** Both full sources were provided directly (published `2026.10.13.1` and petrt3522's version). A source diff and static security audit found no newly introduced networking, external dependencies, dynamic execution or additional userscript permissions. Static review cannot establish malware absence or live compatibility. The merged GitHub source contains the contributor's changes with targeted hardening and version metadata consistency; see [release notes](./RELEASE_NOTES_2026.10.30.1.md) for the verification boundary.
+Distributed under the **[JSM Custom License v1.1](./LICENSE)**. This is a **custom source-available license, not an OSI-approved open-source license**. It permits specified use, modification, redistribution, and commercial integration subject to conditions including attribution; resale of substantially unchanged standalone copies is restricted. Read the complete license before redistribution or commercial use.
 
-Contributor acknowledgement is retained in source, documentation, and release notes. **License history:** The older owner-provided Greasy Fork source and contributor fork declared MIT. The GitHub repository and current published Greasy Fork listing now declare JSM Custom License v1.1. Historical license grants and any applicable contributor notices must still be respected; the public metadata match does not establish a legal review or byte-for-byte code parity.
-
-### Reporting issues and contributing
-
-Use [GitHub Issues](https://github.com/jsmlabs/ultrawide-chatgpt/issues) for reproducible bugs and suggestions. Include the userscript version, browser and userscript manager, ChatGPT view, steps to reproduce, expected and observed behavior, and screenshots or **redacted** diagnostics where helpful. Do not post conversation content, credentials, or private URLs.
-
-Code contributions should preserve the userscript's settings and public API, keep new permissions and dependencies justified, and include regression coverage where feasible. Run `node --check script.user.js` and `node --test tests/*.test.cjs` before submitting a pull request. Contributor credit is retained for accepted improvements; see [petrt3522's integration](https://github.com/jsmlabs/ultrawide-chatgpt/pull/4).
-
----
-
-## 📄 License and attribution
-
-Distributed under **[JSM Custom License v1.1](./LICENSE)**, a **custom source-available license, not an OSI-approved open-source license**. It permits use, modification, redistribution, and commercial integration subject to attribution and other conditions; resale of substantially unchanged standalone copies is restricted. Read the complete license before redistributing or using the software commercially.
-
-Created by **jsmdev**. This independent project is **not affiliated with or endorsed by OpenAI**. ChatGPT is a trademark of its respective owner.
+UltraWide ChatGPT is an independent project and is **not affiliated with, sponsored by, or endorsed by OpenAI**. ChatGPT is a trademark of its respective owner.
 
 ---
 
 <div align="center">
 
-**A wider workspace for ChatGPT.**
+**Make better use of the space you already have.**
 
-[Install](https://greasyfork.org/en/scripts/557270-ultrawide-chatgpt) · [Source](./script.user.js) · [Release notes](./RELEASE_NOTES_2026.11.20.5.md) · [Changelog](./CHANGELOG.md) · [Back to top](#-ultrawide-chatgpt)
+[Latest GitHub script](https://raw.githubusercontent.com/jsmlabs/ultrawide-chatgpt/master/script.user.js) · [Greasy Fork](https://greasyfork.org/en/scripts/557270-ultrawide-chatgpt) · [Changelog](./CHANGELOG.md) · [Support](https://github.com/jsmlabs/ultrawide-chatgpt/issues)
 
 </div>
