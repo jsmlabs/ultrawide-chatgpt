@@ -6,7 +6,7 @@
 
 A responsive, configurable **Tampermonkey userscript** that widens ChatGPT conversations and optionally the message composer - without replacing the ChatGPT interface.
 
-[![Version](https://img.shields.io/badge/version-2026.11.19.9-2563eb?style=flat-square)](./script.user.js)
+[![Version](https://img.shields.io/badge/version-2026.11.20.4-2563eb?style=flat-square)](./script.user.js)
 [![Userscript](https://img.shields.io/badge/platform-Tampermonkey-0f766e?style=flat-square)](https://www.tampermonkey.net/)
 [![ChatGPT](https://img.shields.io/badge/target-ChatGPT%20Chat%20%26%20Work-334155?style=flat-square)](https://chatgpt.com/)
 [![License](https://img.shields.io/badge/license-JSM%20Custom%20v1.1-64748b?style=flat-square)](./LICENSE)
@@ -17,14 +17,18 @@ A responsive, configurable **Tampermonkey userscript** that widens ChatGPT conve
 
 ---
 
-## Version 2026.11.19.9
+## Version 2026.11.20.4
 
-- Restores readable structured tables in Work and keeps wide data scrollable inside the widget.
-- Scopes width and alignment to the active chat pane, including pane remounts without a URL change.
-- Addresses horizontal overflow beneath the Work composer and recovers clipped or off-screen `@` suggestion menus.
-- Adds composer and menu geometry diagnostics through the existing DevTools API, using `unsafeWindow` where supported and a DOM-event fallback.
+**Current GitHub source release · November 20, 2026.**
 
-Thanks to [petrt3522](https://greasyfork.org/scripts/557270-ultrawide-chatgpt/discussions/344206) for reporting the Work table issue and sharing a fix. See the [changelog](./CHANGELOG.md) for release history.
+- Strengthens composer scrollbar detection without suppressing real horizontal scroll hosts or scroll-area viewport siblings.
+- Recognizes active `@` suggestions at the cursor, including mentions in the middle of a draft, while avoiding email-address false positives.
+- Tightens popup geometry recovery, focus ownership, and temporary style cleanup for Chat, Projects, split view, and Work.
+- Retains reversible runtime guards, existing settings, keyboard shortcuts, and the built-in diagnostics API.
+
+**Verification:** JavaScript syntax and eight focused Node checks of scroll eligibility and caret-context parsing passed locally. These do **not** establish full browser, Tampermonkey, or production ChatGPT compatibility. The integrated browser tests previously reported for this version were performed against a local test surface, not ChatGPT itself. See the [current release notes](./RELEASE_NOTES_2026.11.20.4.md).
+
+**Community credits:** [petrt3522](https://greasyfork.org/scripts/557270-ultrawide-chatgpt/discussions/342892) contributed pane-sizing and layout investigations integrated and credited in this project, including the [merged contribution PR #4](https://github.com/jsmlabs/ultrawide-chatgpt/pull/4). The [Work table follow-up](https://greasyfork.org/scripts/557270-ultrawide-chatgpt/discussions/344206) is also acknowledged.
 
 ## ✨ Features
 
@@ -170,7 +174,7 @@ For a reproducible issue, capture the script version, browser, userscript manage
 
 ## 🧪 Verification and limitations
 
-The syntax check and 16 isolated Node tests cover pane sizing and remounts, composer selection, split-view detection, clipping cleanup, and performance contracts. Live behavior across ChatGPT Work, Projects, zoom, and split-view variants still requires browser verification.
+The repository provides isolated Node tests for pane sizing and remounts, composer selection, split-view detection, clipping cleanup, performance, scroll guards, and mention-at-caret detection. The latest local pre-publication checks included JavaScript syntax and eight focused Node cases. Do not treat isolated tests as proof of live ChatGPT, Work, Projects, zoom, or Tampermonkey compatibility.
 
 To check JavaScript syntax locally, after obtaining the repository:
 
@@ -209,7 +213,7 @@ ChatGPT navigation / DOM / pane resize
 
 UltraWide is a **single self-contained userscript**, with no application build step. It uses targeted layout rules and markers, ChatGPT thread-width variables where available, and bounded observation/reconciliation to handle supported DOM changes. Detection and split-view classification are heuristic; they cannot guarantee compatibility with future interface revisions. The userscript runs in the browser and does not replace or proxy the ChatGPT service.
 
-**Repository files:** [`script.user.js`](./script.user.js) · [`CHANGELOG.md`](./CHANGELOG.md) · [`Release notes`](./RELEASE_NOTES_2026.10.30.1.md) · [`Tests`](./tests) · [`CI`](./.github/workflows/userscript-validation.yml) · [`LICENSE`](./LICENSE)
+**Repository files:** [`script.user.js`](./script.user.js) · [`CHANGELOG.md`](./CHANGELOG.md) · [`Latest release notes`](./RELEASE_NOTES_2026.11.20.4.md) · [`Historical release notes`](./RELEASE_NOTES_2026.10.30.1.md) · [`Tests`](./tests) · [`CI`](./.github/workflows/userscript-validation.yml) · [`LICENSE`](./LICENSE)
 
 ## 🤝 Community contributions
 
@@ -241,6 +245,6 @@ Created by **jsmdev**. This independent project is **not affiliated with or endo
 
 **A wider workspace for ChatGPT.**
 
-[Install](https://greasyfork.org/en/scripts/557270-ultrawide-chatgpt) · [Source](./script.user.js) · [Changelog](./CHANGELOG.md) · [Back to top](#-ultrawide-chatgpt)
+[Install](https://greasyfork.org/en/scripts/557270-ultrawide-chatgpt) · [Source](./script.user.js) · [Release notes](./RELEASE_NOTES_2026.11.20.4.md) · [Changelog](./CHANGELOG.md) · [Back to top](#-ultrawide-chatgpt)
 
 </div>

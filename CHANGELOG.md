@@ -1,5 +1,27 @@
 # Changelog
 
+## [2026.11.20.4] - 2026-11-20
+
+**GitHub source update.** Greasy Fork publication and live production compatibility must be verified separately.
+
+### Fixed
+- Preserve functional horizontal scrolling even when a scrollbar is rendered alongside a scroll-area viewport.
+- Prevent unnecessary cosmetic scrollbar guards outside an active composer `@`-mention context.
+- Use caret-relative mention detection to avoid stale popup recovery for inactive mentions.
+- Restore temporary popup and scrollbar styles more conservatively on focus changes, navigation, disable and stop.
+
+### Improved
+- Prefer the focused composer when several editors are present, while respecting the active chat pane.
+- Bound scroll and clipping recovery to the relevant DOM scope, reducing interference with native interactions.
+- Maintain existing keyboard shortcuts, configuration storage, diagnostic APIs, license and contributor attribution.
+
+### Verification and limitations
+- The current `script.user.js` passed `node --check` locally.
+- Eight focused Node cases for scrollbar eligibility and caret-relative mentions passed against the supplied `2026.11.20.4` source.
+- Node regression tests are included in the repository; future GitHub Actions results should be inspected on the published commit.
+- Live ChatGPT and Tampermonkey integration were not verified in this update.
+- Continued credit to [petrt3522](https://greasyfork.org/scripts/557270-ultrawide-chatgpt/discussions/342892) and [PR #4](https://github.com/jsmlabs/ultrawide-chatgpt/pull/4).
+
 All notable changes are recorded here. An entry under **Unreleased** is not a published release.
 
 ## [2026.11.19.9] - 2026-11-19

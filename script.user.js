@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         UltraWide ChatGPT
 // @namespace    https://www.instagram.com/jsm.ig/
-// @version      2026.11.19.9
+// @version      2026.11.20.4
 // @author       jsmdev
-// @description  UltraWide ChatGPT with pane-relative sizing, scoped @-menu recovery, and conservative composer overflow protection.
+// @description  UltraWide ChatGPT with pane-relative sizing, scroll-safe composer guards, and reversible mention-menu recovery.
 // @license      JSM-Custom-1.1
 // @match        https://chatgpt.com/*
 // @match        https://www.chatgpt.com/*
@@ -19,14 +19,48 @@
 
 /*
   UltraWide ChatGPT
-  Version: 2026.11.19.9
+  Version: 2026.11.20.4
   --------------------------------------------------------------------------
+  November 20, 2026 - Scroll ownership and editor-input hardening
+  --------------------------------------------------------------------------
+  - Preserve real horizontal scroll controls in composer ancestor scrollports.
+  - Do not hide previously guarded bars when their scroll owner becomes active.
+  - Exclude hidden/inert suggestion portals from @ menu recovery.
+  - Avoid layout churn during IME text composition.
+
+  November 20, 2026 - Further scroll and focus lifecycle hardening
+  --------------------------------------------------------------------------
+  - Scope cosmetic scrollbar hiding strictly to active @ mentions.
+  - Preserve native horizontal scrolling outside mention mode.
+  - Release stale scroll guards on focus transitions to other editors.
+  - Prefer the currently focused composer input in multi-editor layouts.
+  - Improve menu-owner selection and skip repairs for unfocused composers.
+  - Add focused deterministic regression checks for candidate eligibility.
+
   Community contribution: petrt3522 (Greasy Fork, October 29, 2026)
   https://greasyfork.org/scripts/557270-ultrawide-chatgpt/discussions/342892
   Integration: adaptation and hardening by jsmdev. Thanks to petrt3522
   for investigating, documenting and sharing the original improvements.
   Fork modifications supplied with the MIT license statement; preserve
   attribution and consult repository LICENSE for official distribution terms.
+
+  November 20, 2026 - Scroll preservation and popup hardening
+  --------------------------------------------------------------------------
+  - Preserve real horizontal composer scrolling; suppress only empty tracks.
+  - Never hide a portal element from hit-test geometry alone.
+  - Stop overriding document body overflow, preserving ChatGPT scroll ownership.
+  - Prefer nearby suggestion menus; avoid releasing actual scroll containers.
+  - Leave a collapsed menu native when viewport space is insufficient.
+  - Do not auto-update a local patched build from the upstream script.
+
+  November 20, 2026 - Caret and scroll-area ownership hardening
+   --------------------------------------------------------------------------
+   - Detect mentions at the current caret, not only at the end of the draft.
+   - Prefer the actually focused composer in split/Work layouts.
+   - Preserve Radix-style horizontal scrollbar controls whose scroll viewport
+     is a sibling rather than an ancestor of the scrollbar widget.
+   - Avoid unclipping containers with embedded scroll-area viewports.
+   - Preserve the last cleared-state diagnostic for regression triage.
 
   November 19, 2026 - Four-pass stability audit
   --------------------------------------------------------------------------
@@ -282,7 +316,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '2026.11.19.9';
+  const VERSION = '2026.11.20.4';
   const PRODUCT_NAME = 'UltraWide ChatGPT';
   const STORAGE_KEY = 'uwc.settings.v14';
 
@@ -2939,9 +2973,7 @@ ${managedTurn} table:not(:where(${structuredTableScroller} table)){
   );
 }
 
-:root[${ATTR.enabled}="1"][${ATTR.wide}="1"] body:has(${pane}){
-  overflow-x:clip!important;
-}
+/* Do not override body overflow: ChatGPT controls document and overlay scrolling. */
 
 /*
  * ChatGPT's newer Work/Project transcript uses --thread-content-x on its
@@ -2964,11 +2996,6 @@ ${inPane}[class*="group/thread-scroll-layout"]
   translate:none!important;
 }
 
-@supports not (overflow-x:clip){
-  :root[${ATTR.enabled}="1"][${ATTR.wide}="1"] body:has(${pane}){
-    overflow-x:hidden!important;
-  }
-}
 
 /*
  * Current ChatGPT (October 2026) owns the effective reading width at the
@@ -3096,6 +3123,7 @@ ${inPane}[${ATTR.composer}="1"] [class*="thread-body-max-width"]{
   min-width:0!important;
   max-width:100%!important;
   box-sizing:border-box!important;
+  /* Empty forced tracks are cosmetic; scrollable content is never marked. */
   overflow-x:clip!important;
 }
 
@@ -4058,7 +4086,7 @@ ${structuredTableScroller}{
         isVisibleElement(element)
       )
       .map((element, index) => {
-        let score = index + (element === focused ? 100 : 0);
+        let score = index + (element === focused || element.contains(focused) ? 3000 : 0);
 
         try {
           if (element.id === 'prompt-textarea') {
@@ -4184,7 +4212,8 @@ ${structuredTableScroller}{
         const box = element.getBoundingClientRect();
         const css = getComputedStyle(element);
         if (!box.width || css.display === 'none' ||
-            css.visibility === 'hidden' || css.visibility === 'collapse') continue;
+            css.visibility === 'hidden' || css.visibility === 'collapse' ||
+            element.closest('[hidden],[aria-hidden="true"],[inert]')) continue;
         const overlap = Math.max(0, Math.min(box.right, composerRect.right) -
           Math.max(box.left, composerRect.left));
         if (overlap < Math.min(box.width, composerRect.width) * 0.28) continue;
@@ -4198,7 +4227,12 @@ ${structuredTableScroller}{
     }
     // Prefer a menu owned by this composer's DOM when both are plausible.
     // A nearby unrelated portal must not steal a valid owned suggestion list.
-    matchedMenus.sort((a, b) => b.owned - a.owned || a.distance - b.distance);
+    matchedMenus.sort((a, b) => {
+      if (Math.abs(a.distance - b.distance) <= 32 && a.owned !== b.owned) {
+        return b.owned - a.owned;
+      }
+      return a.distance - b.distance || b.owned - a.owned;
+    });
     const menu = matchedMenus[0]?.element || null;
     const result = {
       present: Boolean(menu), active: Boolean(mentionActive),
@@ -4269,7 +4303,12 @@ ${structuredTableScroller}{
     }
     const rect = result.composer;
     const margin = 8;
-    const availableHeight = Math.max(72, Math.floor(rect.top - margin * 2));
+    const availableHeight = Math.floor(rect.top - margin * 2);
+    if (availableHeight < 72) {
+      clearMentionPopupRepair();
+      runtime.mentionPopupLastAudit = { ...result, reason: 'not-enough-room-above' };
+      return;
+    }
     const configuredHeight = parseFloat(getComputedStyle(menu)
       .getPropertyValue('--composer-top-menu-max-height')) || 687;
     const maxHeight = Math.min(availableHeight, Math.max(120, configuredHeight));
@@ -4319,7 +4358,13 @@ ${structuredTableScroller}{
           '[data-thread-user-message-navigation-content]')) break;
       const style = getComputedStyle(node);
       if ((style.overflowY === 'hidden' || style.overflowY === 'clip' ||
-           style.overflowX === 'hidden' || style.overflowX === 'clip')) {
+           style.overflowX === 'hidden' || style.overflowX === 'clip') &&
+          node.scrollHeight <= node.clientHeight + 1 &&
+          node.scrollWidth <= node.clientWidth + 1 &&
+          !node.matches('[data-radix-scroll-area-viewport],[role="listbox"],'+
+            '[data-scroll-area-viewport],[data-slot="scroll-area-viewport"]') &&
+          !node.querySelector('[data-radix-scroll-area-viewport],'+
+            '[data-scroll-area-viewport],[data-slot="scroll-area-viewport"]')) {
         const bounds = node.getBoundingClientRect();
         // Only release ancestors whose clip region would actually mask the
         // intended popup. Other hidden/clip containers keep their semantics.
@@ -4390,15 +4435,95 @@ ${structuredTableScroller}{
     runtime.composerMentionScrollbarScopeNodes.clear();
     getRoot()?.removeAttribute(COMPOSER_DEBUG_ATTR);
     runtime.composerScrollGuardInitialOverflow = new WeakMap();
-    runtime.composerScrollGuardLastAudit = null;
+    runtime.composerScrollGuardLastAudit = {
+      at: Date.now(), reason: 'cleared', found: 0, guarded: 0,
+      visualBars: 0, nativeScrollbarScopes: 0, mentionActive: false
+    };
   }
 
   // The inline composer may be a compact Work surface while the transcript
   // uses the full pane. Limit all candidates to the actual composer geometry.
+  function shouldGuardComposerHorizontalTrack({
+    mentionActive, widthExcess, scrollbarWidget, containsInput,
+    canScrollX, previouslyGuarded, originalOverflowX
+  }) {
+    if (!mentionActive || widthExcess > 1) return false;
+    return Boolean(scrollbarWidget ||
+      (containsInput && (canScrollX || previouslyGuarded) &&
+       originalOverflowX === 'scroll'));
+  }
+
+  // A scrollbar is not cosmetic if its owner (or a nearby scroll host)
+  // actually contains horizontally scrollable content. Prefer retaining a
+  // harmless track over disabling controls for code, chips or attachments.
+  function isGenuineHorizontalScrollport(node) {
+    if (!isElement(node) || !node.isConnected || node.clientWidth <= 0) return false;
+    if (node.scrollWidth <= node.clientWidth + 1) return false;
+    const css = getComputedStyle(node);
+    return /^(auto|scroll|overlay)$/.test(css.overflowX);
+  }
+
+  function hasRealHorizontalScroll(element, boundary) {
+    if (!isElement(element)) return false;
+    for (let node = element, depth = 0;
+      node && depth < 10; node = node.parentElement, depth += 1) {
+      if (isGenuineHorizontalScrollport(node)) return true;
+      if (node === boundary || node.matches('main,[role="main"],body,html')) break;
+    }
+    // Radix and similar scroll areas render the scrollbar *beside* its
+    // viewport. Looking only at ancestors can hide a functional scrollbar.
+    const scrollArea = element.closest(
+      '[data-radix-scroll-area-root],[data-slot="scroll-area"],'+
+      '[data-scroll-area-root],[data-testid="scroll-area"]'
+    );
+    if (scrollArea && (!boundary || boundary.contains(scrollArea) ||
+        scrollArea.contains(boundary))) {
+      const viewports = scrollArea.querySelectorAll(
+        '[data-radix-scroll-area-viewport],[data-slot="scroll-area-viewport"],'+
+        '[data-scroll-area-viewport],[data-testid="scroll-area-viewport"]'
+      );
+      for (const viewport of Array.from(viewports).slice(0, 12)) {
+        if (isGenuineHorizontalScrollport(viewport)) return true;
+      }
+    }
+    return false;
+  }
+
+  function mentionAtComposerCaret(input) {
+    if (!isElement(input)) return false;
+    let preceding = '';
+    if (typeof input.value === 'string') {
+      // An @ menu is contextual to the caret, not the end of the textarea.
+      const position = Number.isInteger(input.selectionStart)
+        ? input.selectionStart : input.value.length;
+      preceding = input.value.slice(Math.max(0, position - 256), position);
+    } else if (input.isContentEditable) {
+      const selection = document.getSelection?.();
+      if (selection?.rangeCount && input.contains(selection.anchorNode)) {
+        try {
+          const range = selection.getRangeAt(0).cloneRange();
+          range.selectNodeContents(input);
+          range.setEnd(selection.anchorNode, selection.anchorOffset);
+          preceding = range.toString().slice(-256);
+        } catch (_) { return false; }
+      } else {
+        return false;
+      }
+    } else {
+      preceding = String(input.textContent || '').slice(-256);
+    }
+    return /(?:^|\s)@[^\s@]{0,64}$/u.test(preceding);
+  }
+
   function getComposerScrollCandidates() {
     const pane = runtime.observedPane?.isConnected
       ? runtime.observedPane : resolveActivePane();
-    const input = findComposerInput(pane);
+    const focused = document.activeElement;
+    const focusedInput = isElement(focused)
+      ? (focused.matches(SELECTOR.composerInput)
+        ? focused : focused.closest(SELECTOR.composerInput)) : null;
+    const input = focusedInput && pane?.contains(focusedInput)
+      ? focusedInput : findComposerInput(pane);
     if (!input || !pane?.contains(input)) {
       return { candidates: [], visualCandidates: [], input: null, mentionActive: false };
     }
@@ -4411,8 +4536,10 @@ ${structuredTableScroller}{
       return { candidates: [], visualCandidates: [], input, mentionActive: false };
     }
 
-    const inputValue = String(input.value ?? input.textContent ?? '').slice(-256);
-    const mentionActive = /(?:^|\s)@[^\s]{0,64}$/u.test(inputValue);
+    const hasOtherFocusedEditor = isElement(focused) &&
+      focused !== input && !input.contains(focused) &&
+      Boolean(focused.closest('input,textarea,[contenteditable="true"],[role="textbox"]'));
+    const mentionActive = !hasOtherFocusedEditor && mentionAtComposerCaret(input);
     const candidates = new Set();
     let node = input.parentElement;
     for (let depth = 0; node && node !== pane && depth < 18;
@@ -4489,8 +4616,17 @@ ${structuredTableScroller}{
             if (['auto','scroll','overlay'].includes(style.overflowX) &&
                 hit.scrollWidth > hit.clientWidth) continue;
             if (style.position === 'fixed' || style.visibility === 'hidden') continue;
-            visualNodes.add(hit);
-            probe.push({ tag: hit.tagName.toLowerCase(), id: hit.id || '',
+            // Portal geometry alone can match a menu border, loading bar or
+            // another extension. Only a semantically identified scrollbar
+            // may be hidden; retain the hit-test observation for diagnostics.
+            const identifiedScrollbar = hit.matches(
+              '[role="scrollbar"][aria-orientation="horizontal"],'+
+              '[data-orientation="horizontal"]'
+            ) || /(?:^|[\s_-])(scrollbar|scroll-thumb|scroll-track)(?:$|[\s_-])/i.test(
+              typeof hit.className === 'string' ? hit.className : ''
+            );
+            if (identifiedScrollbar) visualNodes.add(hit);
+            probe.push({ tag: hit.tagName.toLowerCase(), id: hit.id || '', 
               className: typeof hit.className === 'string'
                 ? hit.className.slice(0, 70) : '',
               width: Math.round(r.width), height: Math.round(r.height),
@@ -4514,7 +4650,8 @@ ${structuredTableScroller}{
       const retainedWidget = runtime.composerScrollGuardNodes.has(element) &&
         element.matches('[data-orientation="horizontal"],'+
           '[role="scrollbar"][aria-orientation="horizontal"]');
-      if (retainedWidget && !rect) {
+      if (retainedWidget && !rect &&
+          !hasRealHorizontalScroll(element.parentElement, shell)) {
         list.push({ element, shouldGuard: true, previous: true,
           scrollbarWidget: true, overflowX: 'visible', widthExcess: 0,
           width: 0, height: 0 });
@@ -4537,9 +4674,14 @@ ${structuredTableScroller}{
       const originalX = previous
         ? runtime.composerScrollGuardInitialOverflow.get(element)
         : style.overflowX;
-      const shouldGuard = scrollbarWidget ||
-        (element.contains(input) && (canScrollX || previous) &&
-         (widthExcess >= 1 || originalX === 'scroll'));
+      // Clipping an overflowing editor host destroys keyboard/mouse scrolling.
+      // Only suppress an empty *forced* track, or a verified cosmetic widget.
+      const shouldGuard = !hasRealHorizontalScroll(element, shell) &&
+        shouldGuardComposerHorizontalTrack({
+        mentionActive, widthExcess, scrollbarWidget,
+        containsInput: element.contains(input), canScrollX,
+        previouslyGuarded: previous, originalOverflowX: originalX
+      });
       list.push({ element, shouldGuard, previous, scrollbarWidget,
         overflowX: style.overflowX, widthExcess,
         width: Math.round(rect.width), height: Math.round(rect.height) });
@@ -4557,7 +4699,9 @@ ${structuredTableScroller}{
               '[role="listbox"],[role="menu"],.monaco-editor,.cm-editor')) continue;
         // Preserve hidden previous candidates until the active mention ends:
         // inspecting their zero-sized layout would make the guard flicker.
-        if (previous) {
+        if (previous && !hasRealHorizontalScroll(element, shell) &&
+            !element.querySelector('button,a,[tabindex]:not([tabindex="-1"]),'+
+              '[role="slider"],[role="button"]')) {
           visualCandidates.push({ element, previous, shouldHide: true,
             width: 0, height: 0, reason: 'retained-active-mention' });
           continue;
@@ -4586,7 +4730,7 @@ ${structuredTableScroller}{
           '[role="scrollbar"][aria-orientation="horizontal"],'+
           '[data-orientation="horizontal"]'
         ) || /(?:^|[\s_-])(scrollbar|scroll-thumb|scroll-track)(?:$|[\s_-])/i.test(className);
-        if (!isScrollbar) continue;
+        if (!isScrollbar || hasRealHorizontalScroll(element, shell)) continue;
         visualCandidates.push({ element, previous, shouldHide: true,
           width: Math.round(rect.width), height: Math.round(rect.height),
           reason: 'mention-adjacent-thin-bar' });
@@ -4693,10 +4837,6 @@ ${structuredTableScroller}{
       return;
     }
     auditMentionPopup(scan.input, scan.mentionActive);
-    if (!settings.widenComposer) {
-      clearComposerScrollGuard(true);
-      return;
-    }
     const next = new Set(scan.candidates.filter(item => item.shouldGuard)
       .map(item => item.element));
     for (const previous of runtime.composerScrollGuardNodes) {
@@ -4801,10 +4941,28 @@ ${structuredTableScroller}{
   }
 
   function onComposerActivity(event) {
+    if (event?.isComposing || event?.keyCode === 229) return;
     const target = event?.target;
-    if (!isElement(target) || !target.matches?.(SELECTOR.composerInput)) {
+    const activeComposerTarget = isElement(target) &&
+      (target.matches?.(SELECTOR.composerInput) ||
+       target.closest?.(SELECTOR.composerInput));
+    if (!activeComposerTarget) {
+      // Switching to an unrelated editor must release an earlier @ guard.
+      if (event?.type === 'focusin' && isElement(target) &&
+          target.matches('input,textarea,[contenteditable="true"],[role="textbox"]')) {
+        scheduleComposerScrollGuardAudit();
+      }
       return;
     }
+    scheduleComposerScrollGuardAudit();
+  }
+
+  function onComposerFocusOut(event) {
+    const target = event?.target;
+    if (!isElement(target) || !(target.matches?.(SELECTOR.composerInput) ||
+        target.closest?.(SELECTOR.composerInput))) return;
+    // The next focus target is not settled during focusout; perform a
+    // frame-delayed reconciliation rather than clearing a menu prematurely.
     scheduleComposerScrollGuardAudit();
   }
 
@@ -6742,6 +6900,61 @@ ${structuredTableScroller}{
         } finally {
           runtime.marked.set(ATTR.turn, previous);
         }
+      }
+    );
+
+    test(
+      'composer-horizontal-scroll-eligibility',
+      () => {
+        const base = {
+          mentionActive: true, widthExcess: 0,
+          scrollbarWidget: false, containsInput: true,
+          canScrollX: true, previouslyGuarded: false,
+          originalOverflowX: 'scroll'
+        };
+        return { ok:
+          shouldGuardComposerHorizontalTrack(base) &&
+          !shouldGuardComposerHorizontalTrack({ ...base, mentionActive: false }) &&
+          !shouldGuardComposerHorizontalTrack({ ...base, widthExcess: 2 }) &&
+          !shouldGuardComposerHorizontalTrack({ ...base, originalOverflowX: 'auto' }) &&
+          !shouldGuardComposerHorizontalTrack({ ...base, containsInput: false }) &&
+          shouldGuardComposerHorizontalTrack({ ...base, scrollbarWidget: true, containsInput: false }) &&
+          !shouldGuardComposerHorizontalTrack({ ...base, scrollbarWidget: true, widthExcess: 5 })
+        };
+      }
+    );
+
+    test(
+      'mention-caret-context',
+      () => {
+        const textarea = document.createElement('textarea');
+        textarea.value = 'Ask @al about code';
+        textarea.setSelectionRange(7, 7);
+        const middle = mentionAtComposerCaret(textarea);
+        textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+        const end = mentionAtComposerCaret(textarea);
+        textarea.value = 'write test@example.com';
+        textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+        const email = mentionAtComposerCaret(textarea);
+        textarea.value = 'Hello @';
+        textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+        const empty = mentionAtComposerCaret(textarea);
+        textarea.value = 'Hello @one@two';
+        textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+        const doubleAt = mentionAtComposerCaret(textarea);
+        return { ok: middle && !end && !email && empty && !doubleAt };
+      }
+    );
+
+    test(
+      'scrollport-horizontal-ownership',
+      () => {
+        // A disconnected scrollport must never count as verified live UI.
+        const root = document.createElement('div');
+        const viewport = document.createElement('div');
+        root.appendChild(viewport);
+        return { ok: !isGenuineHorizontalScrollport(viewport) &&
+          !hasRealHorizontalScroll(viewport, root) };
       }
     );
 
@@ -9097,6 +9310,10 @@ ${structuredTableScroller}{
     document.addEventListener('input', onComposerActivity,
       { capture: true, passive: true, signal });
     document.addEventListener('focusin', onComposerActivity,
+      { capture: true, passive: true, signal });
+    document.addEventListener('focusout', onComposerFocusOut,
+      { capture: true, passive: true, signal });
+    document.addEventListener('keyup', onComposerActivity,
       { capture: true, passive: true, signal });
     document.addEventListener(COMPOSER_DEBUG_REQUEST, onComposerDebugRequest,
       { signal });
