@@ -18,7 +18,7 @@ A configurable Tampermonkey userscript that gives ChatGPT conversations more of 
 </div>
 
 > [!IMPORTANT]
-> **The distribution channels are not yet in sync.** On **November 20, 2026**, the GitHub `master` branch contains **v2026.11.20.5**, while the public Greasy Fork listing serves **v2026.10.30.1**. Use the GitHub source link above for the newer code; use Greasy Fork for its currently published build. Check the version in Tampermonkey before updating. The GitHub userscript intentionally omits `@updateURL` and `@downloadURL`, so GitHub-source installations require manual updates.
+> **GitHub and Greasy Fork are separate publication channels.** GitHub `master` currently contains **v2026.11.20.5**. Greasy Fork may have a different published version; check the version shown on its listing and in Tampermonkey before installing or updating. The GitHub userscript intentionally omits `@updateURL` and `@downloadURL`, so GitHub-source installations must be updated manually.
 
 ## ✨ Features
 
