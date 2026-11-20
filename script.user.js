@@ -1,13 +1,12 @@
 // ==UserScript==
 // @name         🖥️ UltraWide ChatGPT
-// @namespace    https://www.instagram.com/jsm.ig/
-// @version      2026.11.20.5
+// @version      2026.11.20.4
 // @author       jsmdev
 // @description  ✨ Make ChatGPT better on any screen! Enjoy wider chats, adjustable layouts, easier reading, smooth scrolling, and more room to work.
 // @license      JSM-Custom-1.1
 // @match        https://chatgpt.com/*
 // @match        https://www.chatgpt.com/*
-// @icon         https://raw.githubusercontent.com/jsmlabs/ultrawide-chatgpt/master/assets/ultrawide-icon.png
+// @icon         https://cdn.jsdelivr.net/gh/simple-icons/simple-icons/icons/openai.svg
 // @run-at       document-start
 // @noframes
 // @grant        GM_getValue
@@ -15,11 +14,14 @@
 // @grant        GM_registerMenuCommand
 // @grant        GM_unregisterMenuCommand
 // @grant        unsafeWindow
+// @namespace https://www.instagram.com/jsm.ig/
+// @downloadURL https://update.greasyfork.org/scripts/557270/%F0%9F%96%A5%EF%B8%8F%20UltraWide%20ChatGPT.user.js
+// @updateURL https://update.greasyfork.org/scripts/557270/%F0%9F%96%A5%EF%B8%8F%20UltraWide%20ChatGPT.meta.js
 // ==/UserScript==
 
 /*
   UltraWide ChatGPT
-  Version: 2026.11.20.5
+  Version: 2026.11.20.4
   --------------------------------------------------------------------------
   November 20, 2026 - Scroll ownership and editor-input hardening
   --------------------------------------------------------------------------
@@ -316,7 +318,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '2026.11.20.5';
+  const VERSION = '2026.11.20.4';
   const PRODUCT_NAME = 'UltraWide ChatGPT';
   const STORAGE_KEY = 'uwc.settings.v14';
 
@@ -4086,9 +4088,7 @@ ${structuredTableScroller}{
         isVisibleElement(element)
       )
       .map((element, index) => {
-        let score = index + (element === focused || element.contains?.(focused) ? 3000 : 0);
-        // A focused unrelated form must not outrank the canonical prompt.
-        if (element.matches(PRIMARY_COMPOSER_INPUT)) score += 800;
+        let score = index + (element === focused || element.contains(focused) ? 3000 : 0);
 
         try {
           if (element.id === 'prompt-textarea') {
@@ -4628,7 +4628,7 @@ ${structuredTableScroller}{
               typeof hit.className === 'string' ? hit.className : ''
             );
             if (identifiedScrollbar) visualNodes.add(hit);
-            probe.push({ tag: hit.tagName.toLowerCase(), id: hit.id || '', 
+            probe.push({ tag: hit.tagName.toLowerCase(), id: hit.id || '',
               className: typeof hit.className === 'string'
                 ? hit.className.slice(0, 70) : '',
               width: Math.round(r.width), height: Math.round(r.height),
