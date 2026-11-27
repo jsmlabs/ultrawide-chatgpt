@@ -184,7 +184,7 @@ uwc.reset();
 - **Scope:** The project targets ChatGPT's website. It does not provide an official ChatGPT integration.
 - **Limitations:** ChatGPT's UI evolves. DOM-based layout detection cannot guarantee correct behavior across every browser, account, zoom level, Work view, or future interface revision.
 
-**ChatGPT icon:** The userscript and README use the original [OpenAI SVG icon](https://cdn.jsdelivr.net/gh/simple-icons/simple-icons/icons/openai.svg) from Simple Icons. The former custom PNG remains in the repository for historical compatibility.
+**ChatGPT icon:** The userscript and README use the original [OpenAI SVG icon](https://cdn.jsdelivr.net/gh/simple-icons/simple-icons/icons/openai.svg) from Simple Icons.
 
 ## 🧪 Development
 
