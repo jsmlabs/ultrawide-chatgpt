@@ -15,9 +15,19 @@ const source = fs.readFileSync(
 function extractFunction(name) {
   const start = source.indexOf(`  function ${name}(`);
   assert.ok(start >= 0, `Missing userscript function: ${name}`);
-  const end = source.indexOf('\n  }\n', start);
-  assert.ok(end > start, `Cannot extract function: ${name}`);
-  return source.slice(start, end + 5);
+  // CSS template literals can contain lines that look like function endings.
+  // Only accept a complete, syntactically valid JavaScript declaration.
+  for (let end = source.indexOf('\n  }\n', start); end > start;
+    end = source.indexOf('\n  }\n', end + 1)) {
+    const candidate = source.slice(start, end + 5);
+    try {
+      new vm.Script(candidate);
+      return candidate;
+    } catch (error) {
+      if (!(error instanceof SyntaxError)) throw error;
+    }
+  }
+  assert.fail(`Cannot extract function: ${name}`);
 }
 
 function createStyle(initialValue = '', priority = '') {
