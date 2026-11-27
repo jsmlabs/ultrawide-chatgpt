@@ -1,5 +1,11 @@
 # Changelog
 
+## [2026.11.27.2] - 2026-11-27
+
+### Fixed
+- Remove the screen emoji from the userscript name and retain the existing PNG icon.
+- Display the existing PNG logo in the README instead of the heading emoji.
+
 ## [2026.11.27.1] - 2026-11-27
 
 ### Fixed
