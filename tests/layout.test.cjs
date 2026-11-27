@@ -343,7 +343,7 @@ test('Safe Media preserves native user attachment dimensions', () => {
   const context = vm.createContext({
     settings: { cap: 'none', safeMedia: true, widenComposer: true, gutterMin: 12, gutterVw: 1, gutterMax: 32 },
     ATTR: new Proxy({}, { get: (_target, key) => 'data-test-' + String(key) }),
-    VERSION: '2026.11.27.1'
+    VERSION: source.match(/^\/\/ @version\s+(\S+)$/m)?.[1]
   });
   vm.runInContext(extractFunction('buildMainCss'), context);
   const css = context.buildMainCss();
