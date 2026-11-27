@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://chatgpt.com/unauth-mweb/images/favicon-48x48.png" alt="ChatGPT favicon" width="96" height="96">
+<img src="https://chatgpt.com/unauth-mweb/images/chatgpt-icon-512x512.png" alt="ChatGPT logo" width="96" height="96">
 
 # UltraWide ChatGPT
 
@@ -184,7 +184,7 @@ uwc.reset();
 - **Scope:** The project targets ChatGPT's website. It does not provide an official ChatGPT integration.
 - **Limitations:** ChatGPT's UI evolves. DOM-based layout detection cannot guarantee correct behavior across every browser, account, zoom level, Work view, or future interface revision.
 
-**ChatGPT icon:** The userscript and README use the [native ChatGPT website favicon](https://chatgpt.com/unauth-mweb/images/favicon-48x48.png) directly from `chatgpt.com`. No custom project icon or third-party icon service is used.
+**ChatGPT icons:** The userscript retains the [native 48 × 48 favicon](https://chatgpt.com/unauth-mweb/images/favicon-48x48.png); the README uses the [native 512 × 512 app icon](https://chatgpt.com/unauth-mweb/images/chatgpt-icon-512x512.png) for sharp rendering at its existing display size. Both are served directly by `chatgpt.com`.
 
 ## 🧪 Development
 

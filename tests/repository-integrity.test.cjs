@@ -12,6 +12,7 @@ const readme = read('README.md');
 const changelog = read('CHANGELOG.md');
 const version = script.match(/^\/\/ @version\s+(\S+)$/m)?.[1];
 const icon = 'https://chatgpt.com/unauth-mweb/images/favicon-48x48.png';
+const readmeIcon = 'https://chatgpt.com/unauth-mweb/images/chatgpt-icon-512x512.png';
 
 test('userscript, runtime, README and changelog agree', () => {
   assert.match(version || '', /^\d{4}\.\d{2}\.\d{2}\.\d+$/);
@@ -22,9 +23,10 @@ test('userscript, runtime, README and changelog agree', () => {
   assert.ok(changelog.includes('## [' + version + ']'));
 });
 
-test('userscript and README use the native ChatGPT favicon', () => {
+test('userscript retains the native favicon and README uses the high-resolution app icon', () => {
   assert.equal(script.match(/^\/\/ @icon\s+(\S+)$/m)?.[1], icon);
-  assert.ok(readme.includes('src="' + icon + '"'));
+  assert.ok(readme.includes('src="' + readmeIcon + '"'));
+  assert.ok(!readme.includes('src="' + icon + '"'));
 });
 
 test('GitHub installation does not auto-update to a separate Greasy Fork build', () => {
