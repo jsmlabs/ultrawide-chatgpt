@@ -9,18 +9,18 @@
 A configurable Tampermonkey userscript that gives ChatGPT conversations more of your available screen space — without replacing the familiar interface.
 
 [![GitHub source version](https://img.shields.io/badge/GitHub-2026.11.27.4-2563eb?style=flat-square)](./script.user.js)
-[![Validation](https://img.shields.io/github/actions/workflow/status/jsmlabs/ultrawide-chatgpt/userscript-validation.yml?branch=master&label=Validation&style=flat-square)](https://github.com/jsmlabs/ultrawide-chatgpt/actions/workflows/userscript-validation.yml)
+[![Validation](https://img.shields.io/github/actions/workflow/status/jsmlabs/ultrawide-chatgpt/userscript-validation.yml?branch=main&label=Validation&style=flat-square)](https://github.com/jsmlabs/ultrawide-chatgpt/actions/workflows/userscript-validation.yml)
 [![Tampermonkey](https://img.shields.io/badge/Userscript-Tampermonkey-0f766e?style=flat-square)](https://www.tampermonkey.net/)
 [![License](https://img.shields.io/badge/License-JSM%20Custom%201.1-64748b?style=flat-square)](./LICENSE)
 
-**[Install latest GitHub source](https://raw.githubusercontent.com/jsmlabs/ultrawide-chatgpt/master/script.user.js)** · **[Install from Greasy Fork](https://greasyfork.org/en/scripts/557270-ultrawide-chatgpt)** · [View source](./script.user.js) · [Report an issue](https://github.com/jsmlabs/ultrawide-chatgpt/issues)
+**[Install latest GitHub source](https://raw.githubusercontent.com/jsmlabs/ultrawide-chatgpt/main/script.user.js)** · **[Install from Greasy Fork](https://greasyfork.org/en/scripts/557270-ultrawide-chatgpt)** · [View source](./script.user.js) · [Report an issue](https://github.com/jsmlabs/ultrawide-chatgpt/issues)
 
 [Features](#-features) · [Installation](#-installation) · [Settings](#-settings) · [Troubleshooting](#-troubleshooting) · [Development](#-development)
 
 </div>
 
 > [!IMPORTANT]
-> **GitHub and Greasy Fork are separate publication channels.** GitHub `master` currently contains **v2026.11.27.4**. Greasy Fork may have a different published version; check the version shown on its listing and in Tampermonkey before installing or updating. The GitHub userscript intentionally omits `@updateURL` and `@downloadURL`, so GitHub-source installations must be updated manually.
+> **GitHub and Greasy Fork are separate publication channels.** GitHub `main` currently contains **v2026.11.27.4**. Greasy Fork may have a different published version; check the version shown on its listing and in Tampermonkey before installing or updating. The GitHub userscript intentionally omits `@updateURL` and `@downloadURL`, so GitHub-source installations must be updated manually.
 
 ## ✨ Features
 
@@ -47,7 +47,7 @@ With the defaults, widening is eligible when the **effective chat pane** is at l
 
 1. Install and enable **Tampermonkey** in your browser.
 2. Pick **one** installation source:
-   - **[Latest GitHub source](https://raw.githubusercontent.com/jsmlabs/ultrawide-chatgpt/master/script.user.js)** — newer repository build; manually update when needed.
+   - **[Latest GitHub source](https://raw.githubusercontent.com/jsmlabs/ultrawide-chatgpt/main/script.user.js)** — newer repository build; manually update when needed.
    - **[Greasy Fork](https://greasyfork.org/en/scripts/557270-ultrawide-chatgpt)** — separately published version; check its displayed version before installing.
 3. Approve the userscript installation. If your manager opens the GitHub link as plain text, copy the complete [`script.user.js`](./script.user.js) source into a new Tampermonkey script, including its metadata header.
 4. Refresh **[chatgpt.com](https://chatgpt.com/)**. Press **`Alt+S`** outside the message editor to open UltraWide settings, or use the Tampermonkey menu.
@@ -197,7 +197,7 @@ node --check script.user.js
 node --test tests/*.test.cjs
 ```
 
-The [GitHub Actions workflow](./.github/workflows/userscript-validation.yml) runs these checks on pull requests and pushes to `master`. Tests cover isolated layout, integration, and scroll-regression contracts. **A passing syntax or Node test does not establish live browser, Tampermonkey, Work, or production ChatGPT compatibility.** Manual browser validation is still necessary for navigation, long conversations, pane resizing, tables, `@` menus, and enable/disable cleanup.
+The [GitHub Actions workflow](./.github/workflows/userscript-validation.yml) runs these checks on pull requests and pushes to `main`. Tests cover isolated layout, integration, and scroll-regression contracts. **A passing syntax or Node test does not establish live browser, Tampermonkey, Work, or production ChatGPT compatibility.** Manual browser validation is still necessary for navigation, long conversations, pane resizing, tables, `@` menus, and enable/disable cleanup.
 
 <details>
 <summary><strong>Architecture and project files</strong></summary>
@@ -244,6 +244,6 @@ UltraWide ChatGPT is an independent project and is **not affiliated with, sponso
 
 **Make better use of the space you already have.**
 
-[Latest GitHub script](https://raw.githubusercontent.com/jsmlabs/ultrawide-chatgpt/master/script.user.js) · [Greasy Fork](https://greasyfork.org/en/scripts/557270-ultrawide-chatgpt) · [Changelog](./CHANGELOG.md) · [Support](https://github.com/jsmlabs/ultrawide-chatgpt/issues)
+[Latest GitHub script](https://raw.githubusercontent.com/jsmlabs/ultrawide-chatgpt/main/script.user.js) · [Greasy Fork](https://greasyfork.org/en/scripts/557270-ultrawide-chatgpt) · [Changelog](./CHANGELOG.md) · [Support](https://github.com/jsmlabs/ultrawide-chatgpt/issues)
 
 </div>
