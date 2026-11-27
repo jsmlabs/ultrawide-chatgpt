@@ -1,13 +1,13 @@
 // ==UserScript==
 // @name         UltraWide ChatGPT
 // @namespace    https://www.instagram.com/jsm.ig/
-// @version      2026.11.27.3
+// @version      2026.11.27.4
 // @author       jsmdev
 // @description  ✨ Make ChatGPT better on any screen! Enjoy wider chats, adjustable layouts, easier reading, smooth scrolling, and more room to work.
 // @license      JSM-Custom-1.1
 // @match        https://chatgpt.com/*
 // @match        https://www.chatgpt.com/*
-// @icon         https://cdn.jsdelivr.net/gh/simple-icons/simple-icons/icons/openai.svg
+// @icon         https://chatgpt.com/unauth-mweb/images/favicon-48x48.png
 // @run-at       document-start
 // @noframes
 // @grant        GM_getValue
@@ -19,7 +19,7 @@
 
 /*
   UltraWide ChatGPT
-  Version: 2026.11.27.3
+  Version: 2026.11.27.4
   --------------------------------------------------------------------------
   November 27, 2026 - Preserve native user attachment geometry
   --------------------------------------------------------------------------
@@ -321,7 +321,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '2026.11.27.3';
+  const VERSION = '2026.11.27.4';
   const PRODUCT_NAME = 'UltraWide ChatGPT';
   const STORAGE_KEY = 'uwc.settings.v14';
 

@@ -25,3 +25,11 @@ jobs:
         run: node --check script.user.js
       - name: Repository and regression tests
         run: node --test tests/*.test.cjs
+      - name: Native ChatGPT favicon availability (advisory)
+        continue-on-error: true
+        run: |
+          icon_url=$(sed -n 's|^// @icon[[:space:]]*||p' script.user.js)
+          icon_file=$(mktemp)
+          trap 'rm -f "$icon_file"' EXIT
+          curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' --max-time 15 --retry 2 --retry-max-time 40 "$icon_url" --output "$icon_file"
+          node -e 'const a = require("node:assert/strict"); const b = require("node:fs").readFileSync(process.argv[1]); a.deepEqual([...b.subarray(0,8)], [137,80,78,71,13,10,26,10]); a.equal(b.toString("ascii",12,16),"IHDR"); a.equal(b.readUInt32BE(16),48); a.equal(b.readUInt32BE(20),48); console.log("Native favicon: valid 48x48 PNG");' "$icon_file"

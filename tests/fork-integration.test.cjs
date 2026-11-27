@@ -111,10 +111,10 @@ test('clipping cleanup restores owned translation but preserves external overrid
 });
 
 
-test('original ChatGPT icon, readable description and explicit update policy', () => {
+test('native ChatGPT favicon, readable description and explicit update policy', () => {
   assert.match(source, /^\/\/ @name\s+UltraWide ChatGPT$/m);
   assert.match(source, /^\/\/ @description\s+✨ Make ChatGPT better on any screen!/m);
-  assert.match(source, /^\/\/ @icon\s+https:\/\/cdn\.jsdelivr\.net\/gh\/simple-icons\/simple-icons\/icons\/openai\.svg$/m);
+  assert.equal(source.match(/^\/\/ @icon\s+(\S+)$/m)?.[1], 'https://chatgpt.com/unauth-mweb/images/favicon-48x48.png');
   assert.doesNotMatch(source, /^\/\/ @(?:updateURL|downloadURL)\b/m);
   assert.match(source, /element\.contains\?\.\(focused\)/);
 });

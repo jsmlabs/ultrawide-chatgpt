@@ -1,5 +1,12 @@
 # Changelog
 
+## [2026.11.27.4] - 2026-11-27
+
+### Fixed
+- Use the native 48 × 48 ChatGPT website favicon from chatgpt.com instead of the generic Simple Icons OpenAI SVG.
+- Synchronize README branding and metadata checks; no runtime layout changes.
+- Add an advisory CI check for the external icon's HTTP response and PNG dimensions; network failures are reported separately from offline regression tests.
+
 ## [2026.11.27.3] - 2026-11-27
 
 ### Fixed

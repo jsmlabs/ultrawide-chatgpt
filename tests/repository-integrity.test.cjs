@@ -11,7 +11,7 @@ const script = read('script.user.js');
 const readme = read('README.md');
 const changelog = read('CHANGELOG.md');
 const version = script.match(/^\/\/ @version\s+(\S+)$/m)?.[1];
-const icon = 'https://cdn.jsdelivr.net/gh/simple-icons/simple-icons/icons/openai.svg';
+const icon = 'https://chatgpt.com/unauth-mweb/images/favicon-48x48.png';
 
 test('userscript, runtime, README and changelog agree', () => {
   assert.match(version || '', /^\d{4}\.\d{2}\.\d{2}\.\d+$/);
@@ -22,7 +22,7 @@ test('userscript, runtime, README and changelog agree', () => {
   assert.ok(changelog.includes('## [' + version + ']'));
 });
 
-test('userscript and README use the original ChatGPT icon', () => {
+test('userscript and README use the native ChatGPT favicon', () => {
   assert.equal(script.match(/^\/\/ @icon\s+(\S+)$/m)?.[1], icon);
   assert.ok(readme.includes('src="' + icon + '"'));
 });
