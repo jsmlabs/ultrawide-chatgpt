@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         🖥️ UltraWide ChatGPT
 // @namespace    https://www.instagram.com/jsm.ig/
-// @version      2026.11.20.5
+// @version      2026.11.27.1
 // @author       jsmdev
 // @description  ✨ Make ChatGPT better on any screen! Enjoy wider chats, adjustable layouts, easier reading, smooth scrolling, and more room to work.
 // @license      JSM-Custom-1.1
@@ -19,7 +19,12 @@
 
 /*
   UltraWide ChatGPT
-  Version: 2026.11.20.5
+  Version: 2026.11.27.1
+  --------------------------------------------------------------------------
+  November 27, 2026 - Preserve native user attachment geometry
+  --------------------------------------------------------------------------
+  - Scope Safe Media image, video, iframe and figure overrides to assistant content.
+  - Preserve native user attachment dimensions, aspect ratios and reserved layout space.
   --------------------------------------------------------------------------
   November 20, 2026 - Scroll ownership and editor-input hardening
   --------------------------------------------------------------------------
@@ -316,7 +321,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '2026.11.20.5';
+  const VERSION = '2026.11.27.1';
   const PRODUCT_NAME = 'UltraWide ChatGPT';
   const STORAGE_KEY = 'uwc.settings.v14';
 
@@ -2916,24 +2921,26 @@
     const tableScroller = '[class*="TableScroller-"]';
     const structuredTableScroller = `${assistantTurn} ${tableContainer} > ${tableScroller}`;
 
+    // User attachments reserve their own native thumbnail geometry. Never
+    // override their dimensions: intrinsic portrait images can escape the slot.
     const safeMediaCss = settings.safeMedia
       ? `
 :root[${ATTR.enabled}="1"][${ATTR.wide}="1"]
-[${ATTR.turn}="1"] img,
+${assistantTurn} img,
 :root[${ATTR.enabled}="1"][${ATTR.wide}="1"]
-[${ATTR.turn}="1"] video,
+${assistantTurn} video,
 :root[${ATTR.enabled}="1"][${ATTR.wide}="1"]
-[${ATTR.turn}="1"] iframe,
+${assistantTurn} iframe,
 :root[${ATTR.enabled}="1"][${ATTR.wide}="1"]
-[${ATTR.turn}="1"] figure{
+${assistantTurn} figure{
   max-width:100%!important;
   box-sizing:border-box!important;
 }
 
 :root[${ATTR.enabled}="1"][${ATTR.wide}="1"]
-[${ATTR.turn}="1"] img,
+${assistantTurn} img,
 :root[${ATTR.enabled}="1"][${ATTR.wide}="1"]
-[${ATTR.turn}="1"] video{
+${assistantTurn} video{
   height:auto!important;
 }
 

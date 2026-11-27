@@ -15,9 +15,19 @@ const source = fs.readFileSync(
 function extractFunction(name) {
   const start = source.indexOf(`  function ${name}(`);
   assert.ok(start >= 0, `Missing userscript function: ${name}`);
-  const end = source.indexOf('\n  }\n', start);
-  assert.ok(end > start, `Cannot extract function: ${name}`);
-  return source.slice(start, end + 5);
+  // CSS template literals can contain lines that look like function endings.
+  // Only accept a complete, syntactically valid JavaScript declaration.
+  for (let end = source.indexOf('\n  }\n', start); end > start;
+    end = source.indexOf('\n  }\n', end + 1)) {
+    const candidate = source.slice(start, end + 5);
+    try {
+      new vm.Script(candidate);
+      return candidate;
+    } catch (error) {
+      if (!(error instanceof SyntaxError)) throw error;
+    }
+  }
+  assert.fail(`Cannot extract function: ${name}`);
 }
 
 function createStyle(initialValue = '', priority = '') {
@@ -326,4 +336,33 @@ test('a partial scan rebuilds layout markers when the active pane changes', () =
   scans.length = 0;
   context.performScan([DIRTY.root]);
   assert.deepEqual(scans, []);
+});
+
+
+test('Safe Media preserves native user attachment dimensions', () => {
+  const context = vm.createContext({
+    settings: { cap: 'none', safeMedia: true, widenComposer: true, gutterMin: 12, gutterVw: 1, gutterMax: 32 },
+    ATTR: new Proxy({}, { get: (_target, key) => 'data-test-' + String(key) }),
+    VERSION: '2026.11.27.1'
+  });
+  vm.runInContext(extractFunction('buildMainCss'), context);
+  const css = context.buildMainCss();
+  const assistant = ':is([data-markdown-text-style="assistant-message"],[data-message-author-role="assistant"])';
+  const turn = '[data-test-turn="1"]';
+  const assistantTurn = ':is(' + turn + assistant + ',' + turn + ' ' + assistant + ')';
+  for (const tag of ['img', 'video', 'iframe', 'figure']) {
+    assert.ok(css.includes(assistantTurn + ' ' + tag));
+    assert.ok(!css.includes(turn + ' ' + tag), 'unscoped media override: ' + tag);
+  }
+  const heightRule = css.split('}').find(rule => rule.includes('height:auto!important;') && rule.includes(' img'));
+  assert.ok(heightRule);
+  assert.ok(heightRule.includes(assistantTurn + ' img'));
+  assert.ok(heightRule.includes(assistantTurn + ' video'));
+  assert.ok(css.includes('[data-user-message-bubble="true"]'));
+  context.settings.safeMedia = false;
+  const disabledCss = context.buildMainCss();
+  for (const tag of ['img', 'video', 'iframe', 'figure']) {
+    assert.ok(!disabledCss.includes(assistantTurn + ' ' + tag));
+  }
+  assert.ok(disabledCss.includes('[data-user-message-bubble="true"]'));
 });
