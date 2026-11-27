@@ -1,5 +1,12 @@
 # Changelog
 
+## [2026.11.27.3] - 2026-11-27
+
+### Fixed
+- Restore the original OpenAI SVG icon from Simple Icons in userscript metadata and README.
+- Preserve the plain userscript name and all runtime behavior.
+- Update icon metadata regression checks.
+
 ## [2026.11.27.2] - 2026-11-27
 
 ### Fixed
