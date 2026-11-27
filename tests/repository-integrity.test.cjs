@@ -11,7 +11,7 @@ const script = read('script.user.js');
 const readme = read('README.md');
 const changelog = read('CHANGELOG.md');
 const version = script.match(/^\/\/ @version\s+(\S+)$/m)?.[1];
-const icon = 'assets/ultrawide-icon.png';
+const icon = 'https://cdn.jsdelivr.net/gh/simple-icons/simple-icons/icons/openai.svg';
 
 test('userscript, runtime, README and changelog agree', () => {
   assert.match(version || '', /^\d{4}\.\d{2}\.\d{2}\.\d+$/);
@@ -22,17 +22,9 @@ test('userscript, runtime, README and changelog agree', () => {
   assert.ok(changelog.includes('## [' + version + ']'));
 });
 
-test('icon metadata resolves to a square PNG tracked in this repository', () => {
-  assert.ok(script.includes('// @icon         https://raw.githubusercontent.com/jsmlabs/ultrawide-chatgpt/master/' + icon));
-  const file = path.join(root, icon);
-  assert.ok(fs.existsSync(file), 'Missing userscript icon');
-  const buffer = fs.readFileSync(file);
-  assert.ok(buffer.length > 24);
-  assert.deepEqual([...buffer.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
-  const width = buffer.readUInt32BE(16);
-  const height = buffer.readUInt32BE(20);
-  assert.ok(width >= 16 && width <= 4096);
-  assert.equal(width, height, 'Icon should be square');
+test('userscript and README use the original ChatGPT icon', () => {
+  assert.equal(script.match(/^\/\/ @icon\s+(\S+)$/m)?.[1], icon);
+  assert.ok(readme.includes('src="' + icon + '"'));
 });
 
 test('GitHub installation does not auto-update to a separate Greasy Fork build', () => {
