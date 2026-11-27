@@ -4,7 +4,9 @@
 
 ### Improved
 - Use the native 512 × 512 ChatGPT app icon in the README header, retaining the existing 96 × 96 display size and unchanged userscript favicon.
-- Validate the README icon source and dimensions separately from userscript metadata. No userscript version change.
+- Validate the README icon source and dimensions separately from userscript metadata.
+- Refresh the README with the current attachment-safe layout behavior, distribution channels, settings, architecture, CI coverage, and live-browser verification checklist.
+- Use `main` for installation links and CI push triggers. No userscript version change.
 
 ## [2026.11.27.4] - 2026-11-27
 
