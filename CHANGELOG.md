@@ -1,5 +1,15 @@
 # Changelog
 
+## [2026.11.27.1] - 2026-11-27
+
+### Fixed
+- Scope Safe Media image, video, iframe and figure sizing to assistant content, preserving native user attachment dimensions and reserved space to address attachment/message overlap.
+- Keep text bubble width, transcript sizing and existing scroll behavior unchanged.
+
+### Verification
+- Added deterministic CSS-generation regression tests for assistant media scope and the Safe Media setting.
+- Live ChatGPT/Tampermonkey attachment layout remains to be verified; Greasy Fork publication is separate.
+
 ## [Unreleased] — Repository maintenance (2026-11-20)
 
 ### Restored
